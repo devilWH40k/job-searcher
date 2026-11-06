@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.33.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "job-searcher"
+version = "0.1.0"
+description = "A Telegram bot for searching job vacancies, starting with Work.ua."
+readme = "README.md"
+requires-python = ">=3.14.2,<3.15"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.4",
+    "python-telegram-bot>=22.8",
+]
+
+[project.scripts]
+job-bot = "job_bot.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/job_bot"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
