@@ -3,10 +3,14 @@
 import asyncio
 import logging
 
+import httpx
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from job_bot.config import Config
+from job_bot.services.job_search import JobSearchService
+from job_bot.sources.djinni import USER_AGENT, DjinniClient
+from job_bot.storage import VacancyStorage
 from job_bot.telegram.handlers import help_command, on_error, start, unknown_command
 
 logger = logging.getLogger(__name__)
@@ -14,6 +18,27 @@ logger = logging.getLogger(__name__)
 
 def create_application(config: Config) -> Application:
     """Build sequential command handling with explicit HTTP timeouts."""
+
+    async def initialize_search(application: Application) -> None:
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(20, connect=10),
+            limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html",
+                "Accept-Language": "uk",
+            },
+            follow_redirects=False,
+        )
+        application.bot_data["job_search"] = JobSearchService(
+            DjinniClient(client), VacancyStorage(config.database_path)
+        )
+
+    async def shutdown_search(application: Application) -> None:
+        service = application.bot_data.pop("job_search", None)
+        if service is not None:
+            await service.aclose()
+
     application = (
         Application.builder()
         .token(config.telegram_bot_token)
@@ -25,6 +50,8 @@ def create_application(config: Config) -> Application:
         .get_updates_read_timeout(10)
         .get_updates_write_timeout(10)
         .get_updates_pool_timeout(10)
+        .post_init(initialize_search)
+        .post_shutdown(shutdown_search)
         .build()
     )
     application.add_handler(CommandHandler("start", start))

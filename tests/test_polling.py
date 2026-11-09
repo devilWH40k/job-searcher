@@ -1,6 +1,8 @@
 """Exercise real polling and shutdown with Telegram HTTP fully mocked."""
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
 
@@ -8,13 +10,22 @@ import httpx
 import pytest
 
 from job_bot.config import Config
+from job_bot.sources import http_client
+from job_bot.sources.djinni import ROBOTS_URL, SEARCH_URL, parse_search_results
 from job_bot.telegram import application as telegram_app
+from job_bot.telegram import handlers
+from job_bot.telegram.formatting import format_vacancy
 from job_bot.telegram.handlers import HELP_TEXT, START_TEXT, UNKNOWN_COMMAND_TEXT
 
 
 @pytest.mark.parametrize("fail_first_poll", [False, True])
+@pytest.mark.parametrize("djinni_status", [200, 403])
 def test_polling_dispatches_commands_and_closes_clients(
-    fail_first_poll: bool, monkeypatch: pytest.MonkeyPatch
+    fail_first_poll: bool,
+    djinni_status: int,
+    djinni_html: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original_client = httpx.AsyncClient
     original_create = telegram_app.create_application
@@ -22,6 +33,8 @@ def test_polling_dispatches_commands_and_closes_clients(
     applications = []
     loops = []
     replies = []
+    buttons = []
+    djinni_requests = []
     polls = []
     poll_count = 0
     delivered = False
@@ -52,6 +65,18 @@ def test_polling_dispatches_commands_and_closes_clients(
 
     async def respond(request: httpx.Request) -> httpx.Response:
         nonlocal delivered, poll_count
+        if str(request.url) == ROBOTS_URL:
+            return httpx.Response(
+                200,
+                text="User-agent: *\nDisallow: /developers\n",
+                headers={"Content-Type": "text/plain"},
+            )
+        if request.url.host == "djinni.co":
+            assert str(request.url) == SEARCH_URL
+            djinni_requests.append(request)
+            return httpx.Response(
+                djinni_status, text=djinni_html, headers={"Content-Type": "text/html"}
+            )
         method = request.url.path.rsplit("/", 1)[-1]
         data = parse_qs(request.content.decode())
         if method == "getMe":
@@ -72,13 +97,15 @@ def test_polling_dispatches_commands_and_closes_clients(
                 result = []
         elif method == "sendMessage":
             replies.append(data["text"][0])
+            if "reply_markup" in data:
+                buttons.append(json.loads(data["reply_markup"][0]))
             result = {
                 "message_id": len(replies),
                 "date": 0,
                 "chat": chat,
                 "text": replies[-1],
             }
-            if len(replies) == 3:
+            if len(replies) == (9 if djinni_status == 200 else 4):
                 applications[0].stop_running()
         else:
             raise AssertionError(f"Unexpected Telegram method: {method}")
@@ -101,10 +128,33 @@ def test_polling_dispatches_commands_and_closes_clients(
 
     monkeypatch.setattr(httpx, "AsyncClient", make_client)
     monkeypatch.setattr(telegram_app, "create_application", capture_application)
+    monkeypatch.setattr(handlers, "CARD_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(http_client, "MIN_REQUEST_INTERVAL", 0)
 
-    telegram_app.run_bot(Config(telegram_bot_token="123456:offline-token"))
+    telegram_app.run_bot(
+        Config(
+            telegram_bot_token="123456:offline-token",
+            database_path=tmp_path / "jobs.sqlite3",
+        )
+    )
 
-    assert replies == [START_TEXT, HELP_TEXT, UNKNOWN_COMMAND_TEXT]
+    if djinni_status == 200:
+        matches = [v for v in parse_search_results(djinni_html) if v.remote is True][:6]
+        assert replies == [
+            START_TEXT,
+            *[format_vacancy(v) for v in matches],
+            HELP_TEXT,
+            UNKNOWN_COMMAND_TEXT,
+        ]
+        assert [markup["inline_keyboard"][0][0]["url"] for markup in buttons] == [
+            v.url for v in matches
+        ]
+    else:
+        assert "access is unavailable" in replies[1]
+        assert replies[2:] == [HELP_TEXT, UNKNOWN_COMMAND_TEXT]
+        assert not buttons
+        assert not (tmp_path / "jobs.sqlite3").exists()
+    assert len(djinni_requests) == 1
     assert polls[0]["timeout"] == ["30"]
     assert polls[0]["allowed_updates"] == ['["message"]']
     assert polls[-1]["offset"] == ["4"]

@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /jobs2
+Disallow: /q
+Disallow: /developers
+Disallow: /free-jobs
+Disallow: /set_lang
+
+Sitemap: https://djinni.co/sitemap.xml

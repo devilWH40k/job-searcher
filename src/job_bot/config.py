@@ -17,6 +17,7 @@ class Config:
     """Application settings with secrets excluded from representations."""
 
     telegram_bot_token: str = field(repr=False)
+    database_path: Path = Path("data/vacancies.sqlite3")
 
 
 def load_config(env_file: Path = Path(".env")) -> Config:
