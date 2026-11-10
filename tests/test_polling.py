@@ -88,7 +88,7 @@ def test_polling_dispatches_commands_and_closes_clients(
         }
 
     updates = [
-        message_update(1, "/start", True),
+        message_update(1, handlers.FIND_BUTTON),
         callback_update(2, "source-cb", "source:djinni"),
         message_update(3, "frontend"),
         callback_update(4, "yes-cb", "categories:aaaaaaaaaaaa:yes"),
@@ -97,8 +97,8 @@ def test_polling_dispatches_commands_and_closes_clients(
         callback_update(7, "done-cb", "cat:aaaaaaaaaaaa:2:d:0"),
         callback_update(8, "more-cb", "more:aaaaaaaaaaaa:1"),
         callback_update(9, "duplicate-cb", "more:aaaaaaaaaaaa:1"),
-        callback_update(10, "finish-cb", "finish:aaaaaaaaaaaa"),
-        message_update(11, "/help@test_bot", True),
+        message_update(10, handlers.FINISH_BUTTON),
+        message_update(11, handlers.HELP_BUTTON),
         message_update(12, "/unknown", True),
     ]
     commands = []
@@ -160,7 +160,7 @@ def test_polling_dispatches_commands_and_closes_clients(
                 "chat": chat,
                 "text": replies[-1],
             }
-            if len(replies) == (16 if djinni_status == 200 else 8):
+            if len(replies) == (17 if djinni_status == 200 else 9):
                 applications[0].stop_running()
         else:
             raise AssertionError(f"Unexpected Telegram method: {method}")
@@ -197,6 +197,7 @@ def test_polling_dispatches_commands_and_closes_clients(
     if djinni_status == 200:
         matches = [v for v in parse_search_results(djinni_html) if v.remote is True]
         assert replies == [
+            handlers.MENU_TEXT,
             START_TEXT,
             KEYWORD_TEXT,
             CATEGORY_CHOICE_TEXT,
@@ -209,25 +210,35 @@ def test_polling_dispatches_commands_and_closes_clients(
         assert [
             markup["inline_keyboard"][0][0]["url"]
             for markup in buttons
+            if "inline_keyboard" in markup
             if "url" in markup["inline_keyboard"][0][0]
         ] == [v.url for v in matches]
     else:
-        assert "access is unavailable" in replies[4]
-        assert replies[5:] == [
+        assert "access is unavailable" in replies[5]
+        assert replies[6:] == [
             "Search finished.\n\n" + HELP_TEXT,
             HELP_TEXT,
             UNKNOWN_COMMAND_TEXT,
         ]
-        assert len(buttons) == 5  # Source and category pickers.
+        assert len(buttons) == 8  # Source and category pickers.
         assert not (tmp_path / "jobs.sqlite3").exists()
     assert len(djinni_requests) == 1
     assert polls[0]["timeout"] == ["30"]
     assert json.loads(polls[0]["allowed_updates"][0]) == ["message", "callback_query"]
     assert polls[-1]["offset"] == ["13"]
-    assert len(callback_answers) == 8
+    assert len(callback_answers) == 7
     assert len(category_edits) == 3
-    assert "no longer current" in callback_answers[-2]["text"][0]
+    assert "no longer current" in callback_answers[-1]["text"][0]
     assert [c["command"] for c in commands] == ["start", "help", "finish"]
+    keyboards = [markup for markup in buttons if "keyboard" in markup]
+    assert len(keyboards) == 3
+    assert all(
+        markup["is_persistent"] and markup["resize_keyboard"] for markup in keyboards
+    )
+    assert keyboards[0]["keyboard"] == [
+        [{"text": handlers.FIND_BUTTON}, {"text": handlers.HELP_BUTTON}],
+        [{"text": handlers.FINISH_BUTTON}],
+    ]
     assert menu_buttons == [{"type": "commands"}]
     assert clients and all(client.is_closed for client in clients)
     assert all(loop.is_closed() for loop in loops)

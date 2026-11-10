@@ -19,6 +19,9 @@ from job_bot.services.job_search import JobSearchService
 from job_bot.sources.djinni import USER_AGENT, DjinniClient
 from job_bot.storage import VacancyStorage
 from job_bot.telegram.handlers import (
+    FIND_BUTTON,
+    FINISH_BUTTON,
+    HELP_BUTTON,
     choose_categories,
     finish,
     help_command,
@@ -42,9 +45,9 @@ def create_application(config: Config) -> Application:
         try:
             await application.bot.set_my_commands(
                 [
-                    BotCommand("start", "Start a new search"),
-                    BotCommand("help", "Show available commands"),
-                    BotCommand("finish", "Finish the current search"),
+                    BotCommand("start", "🔍 Find a job"),
+                    BotCommand("help", "💡 Help & commands"),
+                    BotCommand("finish", "✅ Finish search"),
                 ]
             )
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
@@ -103,6 +106,9 @@ def create_application(config: Config) -> Application:
     application.add_handler(
         CallbackQueryHandler(load_more, pattern=r"^more:[0-9a-f]{12}:[0-9]+$")
     )
+    application.add_handler(MessageHandler(filters.Text([FIND_BUTTON]), start))
+    application.add_handler(MessageHandler(filters.Text([HELP_BUTTON]), help_command))
+    application.add_handler(MessageHandler(filters.Text([FINISH_BUTTON]), finish))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, search_keyword)
     )

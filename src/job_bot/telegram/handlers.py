@@ -7,7 +7,13 @@ from dataclasses import replace
 from datetime import timedelta
 from time import monotonic
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    ReplyKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.error import Conflict, Forbidden, InvalidToken, RetryAfter, TelegramError
 from telegram.ext import ContextTypes
@@ -25,6 +31,21 @@ from job_bot.telegram.search_state import SESSION_SECONDS, SearchSession
 
 logger = logging.getLogger(__name__)
 CARD_INTERVAL_SECONDS = 1.1
+FIND_BUTTON = "🔍 Find a job"
+HELP_BUTTON = "💡 Help"
+FINISH_BUTTON = "✅ Finish search"
+MENU_TEXT = "🧭 Use the buttons below to find a job, get help, or finish your search."
+
+
+def main_keyboard() -> ReplyKeyboardMarkup:
+    """Show persistent command shortcuts in Telegram's input keyboard area."""
+    return ReplyKeyboardMarkup(
+        [[FIND_BUTTON, HELP_BUTTON], [FINISH_BUTTON]],
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Enter a keyword or choose an action",
+    )
+
 
 START_TEXT = "Choose a vacancy source:"
 KEYWORD_TEXT = (
@@ -33,10 +54,10 @@ KEYWORD_TEXT = (
 CATEGORY_CHOICE_TEXT = "Would you like to add categories?"
 SEARCHING_TEXT = "Searching Djinni for vacancies..."
 HELP_TEXT = (
-    "Available commands:\n"
-    "/start - Start a new search\n"
-    "/help - Show this help\n"
-    "/finish - Finish the current search\n\n"
+    "🧭 Your job search menu\n\n"
+    "🔍 /start — Find a job\n"
+    "💡 /help — Help & commands\n"
+    "✅ /finish — Finish search\n\n"
     "Choose Djinni, enter a keyword or Skip, then choose whether to add categories.\n"
     "Skip + No searches all public jobs without filters. "
     "Other searches are remote-only.\n"
@@ -51,7 +72,7 @@ async def _reply(
     text: str,
     *,
     parse_mode: str | None = None,
-    reply_markup: InlineKeyboardMarkup | None = None,
+    reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None,
 ) -> None:
     """Send a message, honoring a Telegram rate limit with one bounded retry."""
     try:
@@ -71,6 +92,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if context.user_data is not None and update.effective_chat is not None:
         context.user_data.get("search_sessions", {}).pop(update.effective_chat.id, None)
+    await _reply(message, MENU_TEXT, reply_markup=main_keyboard())
     await _reply(
         message,
         START_TEXT,
@@ -430,13 +452,17 @@ async def finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data is not None and update.effective_chat is not None:
         context.user_data.get("search_sessions", {}).pop(update.effective_chat.id, None)
     if update.effective_message is not None:
-        await _reply(update.effective_message, "Search finished.\n\n" + HELP_TEXT)
+        await _reply(
+            update.effective_message,
+            "Search finished.\n\n" + HELP_TEXT,
+            reply_markup=main_keyboard(),
+        )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Explain the commands currently supported by the bot."""
     if update.effective_message is not None:
-        await _reply(update.effective_message, HELP_TEXT)
+        await _reply(update.effective_message, HELP_TEXT, reply_markup=main_keyboard())
 
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

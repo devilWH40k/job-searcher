@@ -29,7 +29,11 @@ def test_commands_reply_with_plain_text(
     asyncio.run(callback(update, MagicMock()))
 
     update.effective_message.reply_text.assert_awaited_once_with(
-        expected, parse_mode=None, reply_markup=None
+        expected,
+        parse_mode=None,
+        reply_markup=handlers.main_keyboard()
+        if callback is handlers.help_command
+        else None,
     )
     assert len(expected) < 4096
 

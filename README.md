@@ -99,8 +99,15 @@ retain the existing remote-only behavior. Source and keyword entry make no vacan
 requests until No or Search is pressed. If Yes is selected, choose at least one
 category before pressing Search. Failed searches offer Try again.
 
-Telegram's command menu beside the message input is configured at startup with
-`/start`, `/help`, and `/finish`. `/finish` also ends a search during setup. Menu
+A persistent reply keyboard provides **Find a job**, **Help**, and
+**Finish search** as large buttons in Telegram's keyboard area. Send `/start`
+to display it. If hidden, use the keyboard toggle beside the message input to
+reopen it. Buttons work during setup and results; they are handled as commands,
+not search keywords. Source selection and search filters remain inline buttons.
+
+Telegram's command menu beside the message input is also configured at startup with
+`/start` (🔍 Find a job), `/help` (💡 Help & commands), and `/finish`
+(✅ Finish search). `/finish` also ends a search during setup. Menu
 visibility can vary by Telegram client; typing `/` also shows registered commands.
 Restart the bot after updating to register the new commands. If registration fails,
 a warning is logged and the commands still work when entered manually.
