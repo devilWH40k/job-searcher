@@ -20,3 +20,19 @@ supplied by the user on 2026-11-09. It remains for offline regression tests;
 Work.ua is not the Telegram bot's active source.
 
 Fixtures are only test inputs, never a runtime fallback.
+
+`djinni_categories.json` is the public category tree extracted from the user's
+pasted markup on 2026-11-10. It preserves 157 official keys, labels, groups, and
+parent relationships, and verifies the bundled category catalog. A public
+multi-category search was inspected to confirm repeated `primary_keyword`
+parameters and that pagination retains the selection.
+
+`djinni_python_page1.html` and `djinni_python_page2.html` contain sanitized public
+results and actual numbered pagination markup fetched on 2026-11-10 from:
+
+- https://djinni.co/jobs/?all_keywords=python&employment=remote
+- https://djinni.co/jobs/?all_keywords=python&employment=remote&page=2
+
+Job descriptions, scripts, forms, input fields, images, SVG, and tracking/event
+attributes were removed. These fixtures verify progression across source pages
+without making live requests in the default test suite.

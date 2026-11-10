@@ -2,13 +2,15 @@
 
 A Python Telegram bot for learning how to search public Djinni job listings.
 
-The bot runs with Telegram long polling. `/start` immediately searches Djinni
-for remote front-end vacancies and returns the first **six remote matches** as
-separate card messages, each with a title, company, location, salary when present,
-and a button linking to the original vacancy. Djinni's `$`–`$$$$` indicators are
-labelled as relative salary bands, not disclosed salary amounts. `/help` describes the demo.
-Unsupported commands receive a help prompt. This is a fixed test search;
-custom `/search` keywords and other filters are not implemented yet.
+The bot runs with Telegram long polling. Send `/start`, select **Djinni**, then
+enter a keyword or tap **Skip**, and choose whether to add categories.
+It returns up to **six matches** as separate cards with original links.
+The last card has **Load 6 more** when additional results are available.
+Djinni's `$`–`$$$$` indicators are relative salary bands, not salary amounts.
+`/help` describes the flow. Djinni is currently the only available source;
+keyword/category searches remain remote-only. Skip + No searches all public jobs.
+A `/search` command and other filters are
+not implemented.
 
 ## Setup
 
@@ -77,20 +79,63 @@ Run the first command from the project directory, keep the terminal open, then
 send `/start` or `/help` in your bot's Telegram chat. Stop the bot with **Ctrl+C**.
 Help and version commands work without a token or network access.
 
-`/start` searches `https://djinni.co/jobs/?all_keywords=frontend&employment=remote`.
-These parameters were verified against the actual search form; the older
-`keywords` parameter was ignored during inspection. Results retain Djinni's order.
-Entries not explicitly marked `Тільки віддалено` are excluded before taking
-the first six; fewer are sent if fewer matches exist. A short
-search-status message precedes the cards. Cards are paced to reduce Telegram
-rate limits.
+In Telegram:
 
-Successful searches, including empty results, are cached in memory for five
-minutes and shared across chats. Repeat `/start` to see the cached results during
-that interval. Each successful fetch also upserts vacancies into
+1. Send `/start` and tap **Djinni**.
+2. Send a position or keyword using 1-100 characters, or tap **Skip**.
+   Skip stores an empty keyword.
+3. Answer **Would you like to add categories?**:
+   - **No** starts the search immediately using the keyword, if provided.
+   - **Yes** opens the grouped category picker. Select multiple categories and
+     tap **Search**. Previous/Next browse longer groups; Clear resets selections.
+4. Read the first six cards and tap **Load 6 more** to continue.
+5. Tap **Finish**, below Load 6 more, to end the search and see available commands.
+   Finish is also available on the final batch, empty results, and errors.
+   Send `/start` to begin another search.
+
+Skipping the keyword and choosing No requests Djinni's basic `/jobs/` listing
+without keyword, category, or remote filters. Searches with a keyword or categories
+retain the existing remote-only behavior. Source and keyword entry make no vacancy
+requests until No or Search is pressed. If Yes is selected, choose at least one
+category before pressing Search. Failed searches offer Try again.
+
+Telegram's command menu beside the message input is configured at startup with
+`/start`, `/help`, and `/finish`. `/finish` also ends a search during setup. Menu
+visibility can vary by Telegram client; typing `/` also shows registered commands.
+Restart the bot after updating to register the new commands. If registration fails,
+a warning is logged and the commands still work when entered manually.
+
+The picker includes all 157 categories in 11 groups from the supplied Djinni tree.
+It supports up to 50 selected items, matching the inspected site's limit. Broad
+parent categories and specific subcategories use their original Djinni keys.
+Searches use the verified `all_keywords`, `employment=remote`, `primary_keyword`,
+and `page` fields. Multiple categories are sent as repeated `primary_keyword`
+parameters, preserving them when requesting later pages.
+Results retain Djinni's order. Entries not explicitly marked `Тільки віддалено`
+are excluded. Duplicate vacancy IDs are skipped across batches. The final batch
+may contain fewer than six cards, and no further button is shown once results end.
+Cards are paced to reduce Telegram rate limits.
+
+Successful source pages, including empty results, are cached in memory for five
+minutes by normalized keyword, category combination, and page, with at most 128
+cached pages. Equivalent case/spacing and category-order variants reuse the cache;
+different keywords, category combinations, and pages stay separate. Basic, category-only,
+keyword-only, and combined queries have separate cache entries.
+The cache is shared across chats. Load-more uses buffered results before fetching
+another source page. At most three source pages are scanned per interaction;
+if more scanning is needed, a continuation button is offered.
+
+Finish discards the current cursor and invalidates its buttons without deleting
+saved vacancies or shared cached pages. Search cursors and buttons are isolated per Telegram user and chat. Old buttons
+are rejected after a new search, a completed batch, a restart, or 30 minutes of
+inactivity. Failed next-page fetches leave the current button retryable.
+Live listings can change between page requests; duplicate IDs are suppressed.
+
+Each successful fetch also upserts vacancies into
 `data/vacancies.sqlite3`, uniquely by source and vacancy ID, preserving when each
 vacancy was first seen. SQLite runs in a worker thread and stores no Telegram
-user data. Restarting the bot clears the in-memory search cache.
+user data, search keywords, or selected filters. Restarting the bot clears the in-memory cache and
+search sessions, while saved vacancies remain available in SQLite.
 Existing Work.ua records remain in the same database. Djinni records use a
 different source key, so matching numeric IDs do not overwrite Work.ua data.
 
@@ -138,7 +183,9 @@ Before fetching jobs, the adapter retrieves and checks Djinni's robots.txt with
 Python's robots parser. A verified permission decision is cached for one hour.
 If robots.txt cannot be verified or disallows the search URL, the search stops.
 The five-minute result cache avoids additional collection between repeated commands.
-The bot reads only robots.txt and the first public search-results page. It does
+The bot reads only robots.txt and public search-results pages requested by the
+optional keyword/category and load-more flow. Cached robots rules are applied to every new URL,
+including subsequent pages. It does
 not fetch candidate profiles, contacts, full job descriptions, or private pages,
 and does not log in or send applications. No proxy rotation, copied browser
 cookies, CAPTCHA bypass, or browser impersonation is used.
@@ -156,6 +203,9 @@ redistribution, confirm permission with Djinni and review its current terms.
 Actual anonymous HTML was inspected before selectors were chosen:
 `main#jobs_main`, `ul.list-jobs`, `.job-item[id]`, `.job_item__header-link`,
 and `h2.job-item__position`. The genuine empty-results message was also saved.
+Numbered pagination links and their active-page markers were inspected on
+2026-11-10 before source pagination was added. Link targets are validated, and
+requests are rebuilt from the selected keyword and verified page number.
 Original Ukrainian text and relative salary indicators are preserved. Source
 publication timestamps are left unknown because the observed dates indicate
 updates without timezone information; application timestamps are stored in UTC.
@@ -164,6 +214,27 @@ Djinni returned HTTP 200 during inspection. Access can change: a future denial
 or changed markup produces an understandable error rather than a bypass attempt
 or a silent fallback. Work.ua's adapter and offline regression tests remain in
 the repository, but the Telegram demo makes no Work.ua requests.
+
+## Inspecting SQLite
+
+After a search completes successfully, the database is at
+`data/vacancies.sqlite3`. From the project directory, inspect counts with
+Python's built-in SQLite CLI (no extra package is required):
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m sqlite3 data/vacancies.sqlite3 "SELECT source, COUNT(*) FROM vacancies GROUP BY source;"
+```
+
+View the latest saved vacancies:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m sqlite3 data/vacancies.sqlite3 "SELECT title, company, salary_text, url FROM vacancies WHERE source='djinni' ORDER BY first_seen_at DESC LIMIT 10;"
+```
+
+These are read-only SQL queries. The CLI creates an empty database if the path
+does not exist, so complete a successful bot search first. The database contains
+vacancy records; the five-minute query cache and per-user pagination state live
+only in memory. A `salary_text` value such as `$$` remains a relative band.
 
 ## Development
 
@@ -180,6 +251,12 @@ HTTP timeouts/retries/access denials, and the full mocked polling-to-six-cards
 flow. Telegram connection failures and shutdown are also tested.
 Djinni tests additionally cover robots restrictions, unavailable policies,
 policy rechecks, and crawl-delay/request-rate handling.
+Workflow tests cover the source picker, keyword validation, callbacks, subsequent
+source pages, user/chat isolation, stale buttons, and retryable page failures.
+Category tests cover group/page navigation, multiple selections, clear/toggle-off,
+official key encoding, category-aware caching, stale pickers, and category retention
+when loading more results. The category catalog is a dated snapshot; it is not
+downloaded dynamically or inferred from display names.
 
 ## Structure
 
@@ -192,6 +269,7 @@ src/job_bot/
     storage.py        # SQLite upserts in worker threads
     sources/
         djinni.py     # Active source: public listings and robots policy
+        djinni_categories.py # Official category keys and hierarchy snapshot
         http_client.py # Shared conservative requests and safe diagnostics
         work_ua.py    # Inactive adapter and retained parser
     services/
@@ -201,6 +279,8 @@ src/job_bot/
         application.py # Polling lifecycle and handler registration
         handlers.py    # Commands and error reporting
         formatting.py  # Escaped vacancy card text
+        search_state.py # Ephemeral per-user/chat paging state
+        categories.py # Grouped category multi-select keyboards
 tests/
     test_cli.py
     test_config.py

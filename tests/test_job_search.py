@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from job_bot.models import VacancyPage
 from job_bot.services import job_search
 from job_bot.services.job_search import JobSearchService
 from job_bot.sources.djinni import parse_search_results
@@ -19,8 +20,8 @@ def test_six_remote_matches_preserve_order_and_share_cache(
     djinni_html: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = MagicMock()
-    source.search_remote_frontend = AsyncMock(
-        return_value=parse_search_results(djinni_html)
+    source.search = AsyncMock(
+        return_value=VacancyPage(tuple(parse_search_results(djinni_html)))
     )
     source.aclose = AsyncMock()
     storage_path = tmp_path / "jobs.sqlite3"
@@ -30,18 +31,25 @@ def test_six_remote_matches_preserve_order_and_share_cache(
 
     async def scenario() -> None:
         async with asyncio.TaskGroup() as group:
-            requests = [
-                group.create_task(service.search_remote_frontend()) for _ in range(3)
-            ]
-        expected = ["848243", "849054", "855646", "855321", "855021", "853017"]
+            requests = [group.create_task(service.search("frontend")) for _ in range(3)]
+        expected = [
+            "848243",
+            "849054",
+            "855646",
+            "855321",
+            "855021",
+            "853017",
+            "847547",
+            "826244",
+            "846091",
+        ]
         for task in requests:
-            assert [item.source_id for item in task.result()] == expected
-        source.search_remote_frontend.assert_awaited_once()
-        requests[0].result().clear()
-        assert len(await service.search_remote_frontend()) == 6
+            assert [item.source_id for item in task.result().vacancies] == expected
+        source.search.assert_awaited_once()
+        assert len((await service.search("frontend")).vacancies) == 9
         clock[0] = 301
-        assert len(await service.search_remote_frontend()) == 6
-        assert source.search_remote_frontend.await_count == 2
+        assert len((await service.search("frontend")).vacancies) == 9
+        assert source.search.await_count == 2
         await service.aclose()
         source.aclose.assert_awaited_once()
 
@@ -52,27 +60,30 @@ def test_six_remote_matches_preserve_order_and_share_cache(
 
 def test_failed_search_is_not_cached(djinni_html: str, tmp_path: Path) -> None:
     source = MagicMock()
-    source.search_remote_frontend = AsyncMock(
-        side_effect=[SourceFetchError("offline"), parse_search_results(djinni_html)]
+    source.search = AsyncMock(
+        side_effect=[
+            SourceFetchError("offline"),
+            VacancyPage(tuple(parse_search_results(djinni_html))),
+        ]
     )
     service = JobSearchService(source, VacancyStorage(tmp_path / "jobs.sqlite3"))
 
     async def scenario() -> None:
         with pytest.raises(SourceFetchError):
-            await service.search_remote_frontend()
-        assert len(await service.search_remote_frontend()) == 6
+            await service.search("frontend")
+        assert len((await service.search("frontend")).vacancies) == 9
 
     asyncio.run(scenario())
 
 
 def test_empty_results_are_cached(tmp_path: Path) -> None:
     source = MagicMock()
-    source.search_remote_frontend = AsyncMock(return_value=[])
+    source.search = AsyncMock(return_value=VacancyPage(()))
     service = JobSearchService(source, VacancyStorage(tmp_path / "jobs.sqlite3"))
 
     async def scenario() -> None:
-        assert await service.search_remote_frontend() == []
-        assert await service.search_remote_frontend() == []
+        assert (await service.search("frontend")).vacancies == ()
+        assert (await service.search("frontend")).vacancies == ()
 
     asyncio.run(scenario())
-    source.search_remote_frontend.assert_awaited_once()
+    source.search.assert_awaited_once()

@@ -4,14 +4,33 @@ import asyncio
 import logging
 
 import httpx
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import BotCommand, MenuButtonCommands, Update
+from telegram.error import TelegramError
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    filters,
+)
 
 from job_bot.config import Config
 from job_bot.services.job_search import JobSearchService
 from job_bot.sources.djinni import USER_AGENT, DjinniClient
 from job_bot.storage import VacancyStorage
-from job_bot.telegram.handlers import help_command, on_error, start, unknown_command
+from job_bot.telegram.handlers import (
+    choose_categories,
+    finish,
+    help_command,
+    load_more,
+    on_error,
+    search_keyword,
+    select_categories,
+    select_source,
+    skip_keyword,
+    start,
+    unknown_command,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +39,20 @@ def create_application(config: Config) -> Application:
     """Build sequential command handling with explicit HTTP timeouts."""
 
     async def initialize_search(application: Application) -> None:
+        try:
+            await application.bot.set_my_commands(
+                [
+                    BotCommand("start", "Start a new search"),
+                    BotCommand("help", "Show available commands"),
+                    BotCommand("finish", "Finish the current search"),
+                ]
+            )
+            await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        except TelegramError:
+            logger.warning(
+                "Could not configure the Telegram command menu; "
+                "commands remain available."
+            )
         client = httpx.AsyncClient(
             timeout=httpx.Timeout(20, connect=10),
             limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
@@ -42,6 +75,7 @@ def create_application(config: Config) -> Application:
     application = (
         Application.builder()
         .token(config.telegram_bot_token)
+        .concurrent_updates(False)
         .connect_timeout(10)
         .read_timeout(10)
         .write_timeout(10)
@@ -56,6 +90,22 @@ def create_application(config: Config) -> Application:
     )
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("finish", finish))
+    application.add_handler(
+        CallbackQueryHandler(select_source, pattern=r"^source:djinni$")
+    )
+    application.add_handler(CallbackQueryHandler(select_categories, pattern=r"^cat:"))
+    application.add_handler(CallbackQueryHandler(skip_keyword, pattern=r"^skip:"))
+    application.add_handler(
+        CallbackQueryHandler(choose_categories, pattern=r"^categories:")
+    )
+    application.add_handler(CallbackQueryHandler(finish, pattern=r"^finish:"))
+    application.add_handler(
+        CallbackQueryHandler(load_more, pattern=r"^more:[0-9a-f]{12}:[0-9]+$")
+    )
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, search_keyword)
+    )
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(on_error)
     return application
@@ -72,7 +122,7 @@ def run_bot(config: Config) -> None:
         application.run_polling(
             timeout=30,
             bootstrap_retries=3,
-            allowed_updates=[Update.MESSAGE],
+            allowed_updates=[Update.MESSAGE, Update.CALLBACK_QUERY],
             drop_pending_updates=False,
             close_loop=False,
         )

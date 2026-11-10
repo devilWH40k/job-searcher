@@ -135,8 +135,8 @@ def test_robots_is_checked_and_cached_before_public_search(
     async def scenario() -> None:
         client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
         source = DjinniClient(client)
-        assert len(await source.search_remote_frontend()) == 9
-        assert len(await source.search_remote_frontend()) == 9
+        assert len((await source.search("frontend")).vacancies) == 9
+        assert len((await source.search("frontend")).vacancies) == 9
         await source.aclose()
         assert client.is_closed
 
@@ -165,7 +165,7 @@ def test_unverifiable_or_denied_robots_stops_before_search(
     async def scenario() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             with pytest.raises(SourceAccessError):
-                await DjinniClient(client).search_remote_frontend()
+                await DjinniClient(client).search("frontend")
 
     asyncio.run(scenario())
     assert requests == [ROBOTS_URL]
@@ -194,7 +194,7 @@ def test_robots_request_interval_is_honored(
 
     async def scenario() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-            assert await DjinniClient(client).search_remote_frontend() == []
+            assert (await DjinniClient(client).search("frontend")).vacancies == ()
 
     asyncio.run(scenario())
     assert requests == [(ROBOTS_URL, 0), (SEARCH_URL, interval)]
@@ -225,11 +225,41 @@ def test_expired_robots_policy_is_rechecked(
     async def scenario() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             source = DjinniClient(client)
-            assert await source.search_remote_frontend() == []
+            assert (await source.search("frontend")).vacancies == ()
             fake_djinni_clock[0] = 3601
             with pytest.raises(SourceAccessError):
-                await source.search_remote_frontend()
+                await source.search("frontend")
 
     asyncio.run(scenario())
     assert robots_count == 2
     assert search_count == 1
+
+
+def test_cached_robots_is_applied_to_each_new_page(
+    djinni_html: str, fake_djinni_clock: list[float]
+) -> None:
+    requests = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(str(request.url))
+        if str(request.url) == ROBOTS_URL:
+            return httpx.Response(
+                200,
+                text="User-agent: *\nDisallow: /jobs/"
+                "?all_keywords=frontend&employment=remote&page=2\n",
+                headers={"Content-Type": "text/plain"},
+            )
+        assert str(request.url) == SEARCH_URL
+        return httpx.Response(
+            200, text=djinni_html, headers={"Content-Type": "text/html"}
+        )
+
+    async def scenario() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            source = DjinniClient(client)
+            await source.search("frontend")
+            with pytest.raises(SourceAccessError):
+                await source.search("frontend", 2)
+
+    asyncio.run(scenario())
+    assert requests == [ROBOTS_URL, SEARCH_URL]

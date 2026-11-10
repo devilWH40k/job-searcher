@@ -5,13 +5,14 @@ import logging
 import re
 from datetime import UTC, datetime
 from time import monotonic
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urlencode, urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import httpx
 from bs4 import BeautifulSoup
 
-from job_bot.models import Vacancy
+from job_bot.models import Vacancy, VacancyPage, normalize_keyword
+from job_bot.sources.djinni_categories import normalize_categories
 from job_bot.sources.http_client import (
     PublicSearchHttp,
     SourceAccessError,
@@ -24,11 +25,36 @@ USER_AGENT = "JobSearcherBot/0.1 (public job search learning project)"
 logger = logging.getLogger(__name__)
 
 
+def build_search_url(
+    keyword: str | None = None, page: int = 1, *, categories: tuple[str, ...] = ()
+) -> str:
+    """Encode verified filters; an omitted keyword and categories means all jobs."""
+    keyword = normalize_keyword(keyword) if keyword is not None else None
+    categories = normalize_categories(categories)
+    if page < 1:
+        raise ValueError("Search page must be positive.")
+    parameters = [("all_keywords", keyword)] if keyword is not None else []
+    if keyword is not None or categories:
+        parameters.append(("employment", "remote"))
+    parameters.extend(("primary_keyword", key) for key in categories)
+    if page > 1:
+        parameters.append(("page", str(page)))
+    return "https://djinni.co/jobs/" + (
+        "?" + urlencode(parameters) if parameters else ""
+    )
+
+
 def parse_search_results(
     html: str, *, seen_at: datetime | None = None
 ) -> list[Vacancy]:
     """Read only public listing summaries; never collect candidate/contact data."""
     soup = BeautifulSoup(html, "html.parser")
+    return _parse_results(soup, seen_at=seen_at)
+
+
+def _parse_results(
+    soup: BeautifulSoup, *, seen_at: datetime | None = None
+) -> list[Vacancy]:
     main = soup.select_one("main#jobs_main")
     if main is None:
         raise SourceMarkupError("The Djinni results container is missing.")
@@ -113,6 +139,47 @@ def parse_search_results(
     return vacancies
 
 
+def parse_search_page(html: str, page: int = 1) -> VacancyPage:
+    """Read cards and numbered pagination links observed in actual Djinni HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    vacancies = _parse_results(soup)
+    pagination = soup.select_one("main#jobs_main .pagination")
+    if pagination is None:
+        return VacancyPage(tuple(vacancies))
+    active = pagination.select_one(".page-item.active .page-link")
+    if active is None or active.get_text(strip=True) != str(page):
+        raise SourceMarkupError("Djinni returned an unexpected pagination state.")
+    available_pages = set()
+    for link in pagination.select(".page-item:not(.disabled) a.page-link[href]"):
+        href = link.get("href")
+        if not isinstance(href, str):
+            raise SourceMarkupError("A Djinni pagination link is invalid.")
+        try:
+            parsed = urlsplit(urljoin(SEARCH_URL, href))
+        except ValueError as exc:
+            raise SourceMarkupError("A Djinni pagination URL is malformed.") from exc
+        numbers = parse_qs(parsed.query).get("page", [])
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "djinni.co"
+            or parsed.path != "/jobs/"
+            or parsed.fragment
+            or len(numbers) != 1
+            or not numbers[0].isascii()
+            or not numbers[0].isdigit()
+            or int(numbers[0]) < 1
+        ):
+            raise SourceMarkupError("A Djinni pagination URL is invalid.")
+        available_pages.add(int(numbers[0]))
+    if (
+        any(number > page for number in available_pages)
+        and page + 1 not in available_pages
+    ):
+        raise SourceMarkupError("Djinni's next pagination link is missing.")
+    next_page = page + 1 if page + 1 in available_pages else None
+    return VacancyPage(tuple(vacancies), next_page)
+
+
 class DjinniClient:
     """Read anonymous public jobs only, stopping if robots rules deny access."""
 
@@ -120,45 +187,53 @@ class DjinniClient:
         self._http = PublicSearchHttp(client, "Djinni")
         self._robots_lock = asyncio.Lock()
         self._robots_expires_at = 0.0
+        self._robots_rules: RobotFileParser | None = None
 
-    async def _check_robots(self) -> None:
+    async def _check_robots(self, url: str) -> None:
         async with self._robots_lock:
-            if monotonic() < self._robots_expires_at:
-                return
-            robots_text = await self._http.get_text(
-                ROBOTS_URL, content_type="text/plain"
-            )
-            if "user-agent:" not in robots_text.lower():
-                raise SourceAccessError("Djinni robots.txt could not be verified.")
-            rules = RobotFileParser(ROBOTS_URL)
-            rules.parse(robots_text.splitlines())
-            if not rules.can_fetch(USER_AGENT, SEARCH_URL):
+            if self._robots_rules is None or monotonic() >= self._robots_expires_at:
+                robots_text = await self._http.get_text(
+                    ROBOTS_URL, content_type="text/plain"
+                )
+                if "user-agent:" not in robots_text.lower():
+                    raise SourceAccessError("Djinni robots.txt could not be verified.")
+                rules = RobotFileParser(ROBOTS_URL)
+                rules.parse(robots_text.splitlines())
+                rate = rules.request_rate(USER_AGENT)
+                self._http.respect_robots_interval(
+                    max(
+                        rules.crawl_delay(USER_AGENT) or 0,
+                        rate.seconds if rate is not None else 0,
+                    )
+                )
+                self._robots_rules = rules
+                self._robots_expires_at = monotonic() + 3600
+            if not self._robots_rules.can_fetch(USER_AGENT, url):
                 logger.warning("Djinni robots.txt disallows the public search request.")
                 raise SourceAccessError("Djinni robots.txt disallows this search.")
-            rate = rules.request_rate(USER_AGENT)
-            self._http.respect_robots_interval(
-                max(
-                    rules.crawl_delay(USER_AGENT) or 0,
-                    rate.seconds if rate is not None else 0,
-                )
-            )
-            self._robots_expires_at = monotonic() + 3600
 
-    async def search_remote_frontend(self) -> list[Vacancy]:
-        """Check robots, fetch one results page, and parse outside the event loop."""
-        await self._check_robots()
-        html = await self._http.get_text(SEARCH_URL)
+    async def search(
+        self,
+        keyword: str | None = None,
+        page: int = 1,
+        *,
+        categories: tuple[str, ...] = (),
+    ) -> VacancyPage:
+        """Check this URL against robots and retrieve one keyword results page."""
+        url = build_search_url(keyword, page, categories=categories)
+        await self._check_robots(url)
+        html = await self._http.get_text(url)
         try:
-            vacancies = await asyncio.to_thread(parse_search_results, html)
+            results = await asyncio.to_thread(parse_search_page, html, page)
         except SourceMarkupError:
             logger.warning("Djinni HTML did not match the expected results structure.")
             raise
         logger.info(
             "Djinni parsed vacancies=%d explicit_remote=%d",
-            len(vacancies),
-            sum(v.remote is True for v in vacancies),
+            len(results.vacancies),
+            sum(v.remote is True for v in results.vacancies),
         )
-        return vacancies
+        return results
 
     async def aclose(self) -> None:
         """Close the anonymous source client at application shutdown."""
