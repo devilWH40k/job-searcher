@@ -1,0 +1,944 @@
+[
+  {
+    "key": "JavaScript",
+    "label": "JavaScript / Front-End",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Angular",
+    "label": "Angular",
+    "group": "Розробка",
+    "parent": "JavaScript"
+  },
+  {
+    "key": "Markup",
+    "label": "Markup",
+    "group": "Розробка",
+    "parent": "JavaScript"
+  },
+  {
+    "key": "React.js",
+    "label": "React.js",
+    "group": "Розробка",
+    "parent": "JavaScript"
+  },
+  {
+    "key": "Svelte",
+    "label": "Svelte",
+    "group": "Розробка",
+    "parent": "JavaScript"
+  },
+  {
+    "key": "Vue.js",
+    "label": "Vue.js",
+    "group": "Розробка",
+    "parent": "JavaScript"
+  },
+  {
+    "key": "Fullstack",
+    "label": "Fullstack",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Java",
+    "label": "Java",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": ".NET",
+    "label": "C# / .NET",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Dotnet Desktop",
+    "label": "Desktop Apps",
+    "group": "Розробка",
+    "parent": ".NET"
+  },
+  {
+    "key": "WinForms",
+    "label": "WinForms",
+    "group": "Розробка",
+    "parent": "Dotnet Desktop"
+  },
+  {
+    "key": "WPF",
+    "label": "WPF",
+    "group": "Розробка",
+    "parent": "Dotnet Desktop"
+  },
+  {
+    "key": "Dotnet Mobile",
+    "label": "Mobile Apps",
+    "group": "Розробка",
+    "parent": ".NET"
+  },
+  {
+    "key": "MAUI",
+    "label": "MAUI",
+    "group": "Розробка",
+    "parent": "Dotnet Mobile"
+  },
+  {
+    "key": "Xamarin",
+    "label": "Xamarin",
+    "group": "Розробка",
+    "parent": "Dotnet Mobile"
+  },
+  {
+    "key": ".NET Gamedev",
+    "label": ".NET Gamedev",
+    "group": "Розробка",
+    "parent": ".NET"
+  },
+  {
+    "key": "Dotnet Cloud",
+    "label": "Server & Cloud",
+    "group": "Розробка",
+    "parent": ".NET"
+  },
+  {
+    "key": "Dotnet Web",
+    "label": "Web Apps",
+    "group": "Розробка",
+    "parent": ".NET"
+  },
+  {
+    "key": "ASP.NET",
+    "label": "ASP.NET",
+    "group": "Розробка",
+    "parent": "Dotnet Web"
+  },
+  {
+    "key": "Blazor",
+    "label": "Blazor",
+    "group": "Розробка",
+    "parent": "Dotnet Web"
+  },
+  {
+    "key": "Python",
+    "label": "Python",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "PHP",
+    "label": "PHP",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Drupal",
+    "label": "Drupal",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "Laravel",
+    "label": "Laravel",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "Magento",
+    "label": "Magento",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "Symfony",
+    "label": "Symfony",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "WordPress",
+    "label": "WordPress",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "Yii",
+    "label": "Yii",
+    "group": "Розробка",
+    "parent": "PHP"
+  },
+  {
+    "key": "Node.js",
+    "label": "Node.js",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "iOS",
+    "label": "iOS",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Android",
+    "label": "Android",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "React Native",
+    "label": "React Native",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "C++",
+    "label": "C / C++ / Embedded",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "C Lang",
+    "label": "C",
+    "group": "Розробка",
+    "parent": "C++"
+  },
+  {
+    "key": "CPP",
+    "label": "C++",
+    "group": "Розробка",
+    "parent": "C++"
+  },
+  {
+    "key": "Embedded",
+    "label": "Embedded",
+    "group": "Розробка",
+    "parent": "C++"
+  },
+  {
+    "key": "Flutter",
+    "label": "Flutter",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Golang",
+    "label": "Golang",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Ruby",
+    "label": "Ruby",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Scala",
+    "label": "Scala",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Salesforce",
+    "label": "Salesforce",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Rust",
+    "label": "Rust",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Elixir",
+    "label": "Elixir",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "Kotlin",
+    "label": "Kotlin",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "ERP",
+    "label": "ERP Systems",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "MS Dynamics",
+    "label": "MS Dynamics / Business Central",
+    "group": "Розробка",
+    "parent": "ERP"
+  },
+  {
+    "key": "Odoo",
+    "label": "Odoo",
+    "group": "Розробка",
+    "parent": "ERP"
+  },
+  {
+    "key": "SAP",
+    "label": "SAP",
+    "group": "Розробка",
+    "parent": "ERP"
+  },
+  {
+    "key": "No Code",
+    "label": "No Code",
+    "group": "Розробка",
+    "parent": null
+  },
+  {
+    "key": "QA Hardware / Embedded",
+    "label": "QA Hardware / Embedded",
+    "group": "QA",
+    "parent": null
+  },
+  {
+    "key": "QA",
+    "label": "QA Manual",
+    "group": "QA",
+    "parent": null
+  },
+  {
+    "key": "QA Automation",
+    "label": "QA Automation",
+    "group": "QA",
+    "parent": null
+  },
+  {
+    "key": "Design",
+    "label": "Design",
+    "group": "Креатив і геймдев",
+    "parent": null
+  },
+  {
+    "key": "Content Design",
+    "label": "Content Design / UX writer",
+    "group": "Креатив і геймдев",
+    "parent": "Design"
+  },
+  {
+    "key": "Graphic Design",
+    "label": "Graphic Design",
+    "group": "Креатив і геймдев",
+    "parent": "Design"
+  },
+  {
+    "key": "Product Design",
+    "label": "Product Design",
+    "group": "Креатив і геймдев",
+    "parent": "Design"
+  },
+  {
+    "key": "UI UX",
+    "label": "UI/UX",
+    "group": "Креатив і геймдев",
+    "parent": "Design"
+  },
+  {
+    "key": "UX Research",
+    "label": "UX Research",
+    "group": "Креатив і геймдев",
+    "parent": "Design"
+  },
+  {
+    "key": "Artist",
+    "label": "2D/3D Artist / Illustrator",
+    "group": "Креатив і геймдев",
+    "parent": null
+  },
+  {
+    "key": "2D Animation",
+    "label": "2D Animation",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "2D Artist",
+    "label": "2D Artist",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "3D Animation",
+    "label": "3D Animation",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "3D Artist",
+    "label": "3D Artist",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "Illustrator",
+    "label": "Illustrator",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "Motion Design",
+    "label": "Motion Design",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "VFX Artist",
+    "label": "VFX Artist",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "Video Editor",
+    "label": "Video Editor",
+    "group": "Креатив і геймдев",
+    "parent": "Artist"
+  },
+  {
+    "key": "Unity",
+    "label": "Gamedev",
+    "group": "Креатив і геймдев",
+    "parent": null
+  },
+  {
+    "key": "Game Design",
+    "label": "Game Design",
+    "group": "Креатив і геймдев",
+    "parent": "Unity"
+  },
+  {
+    "key": "Game Developer",
+    "label": "Game Developer",
+    "group": "Креатив і геймдев",
+    "parent": "Unity"
+  },
+  {
+    "key": "Unity Developer",
+    "label": "Unity Developer",
+    "group": "Креатив і геймдев",
+    "parent": "Game Developer"
+  },
+  {
+    "key": "Unreal Developer",
+    "label": "Unreal Developer",
+    "group": "Креатив і геймдев",
+    "parent": "Game Developer"
+  },
+  {
+    "key": "Level Design",
+    "label": "Level Design",
+    "group": "Креатив і геймдев",
+    "parent": "Unity"
+  },
+  {
+    "key": "Business Analyst",
+    "label": "Business Analyst",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "Data Science",
+    "label": "Data Science",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "ML AI",
+    "label": "ML / AI",
+    "group": "Дані та аналітика",
+    "parent": "Data Science"
+  },
+  {
+    "key": "Data Analyst",
+    "label": "Data Analyst",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "Web Analyst",
+    "label": "Web Analyst",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "Data Engineer",
+    "label": "Data Engineer",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "SQL",
+    "label": "SQL / DBA",
+    "group": "Дані та аналітика",
+    "parent": null
+  },
+  {
+    "key": "Project Manager",
+    "label": "Project Manager",
+    "group": "Менеджмент",
+    "parent": null
+  },
+  {
+    "key": "Product Manager",
+    "label": "Product Manager",
+    "group": "Менеджмент",
+    "parent": null
+  },
+  {
+    "key": "Product Owner",
+    "label": "Product Owner",
+    "group": "Менеджмент",
+    "parent": null
+  },
+  {
+    "key": "Delivery Manager",
+    "label": "Delivery Manager",
+    "group": "Менеджмент",
+    "parent": null
+  },
+  {
+    "key": "Scrum Master",
+    "label": "Scrum Master / Agile Coach",
+    "group": "Менеджмент",
+    "parent": null
+  },
+  {
+    "key": "Lead",
+    "label": "Tech Leadership",
+    "group": "Лідерство",
+    "parent": null
+  },
+  {
+    "key": "CTO",
+    "label": "CTO",
+    "group": "Лідерство",
+    "parent": "Lead"
+  },
+  {
+    "key": "Engineering Manager",
+    "label": "Engineering Manager",
+    "group": "Лідерство",
+    "parent": "Lead"
+  },
+  {
+    "key": "Architect",
+    "label": "Software Architect",
+    "group": "Лідерство",
+    "parent": "Lead"
+  },
+  {
+    "key": "Head Chief",
+    "label": "Head / Chief",
+    "group": "Лідерство",
+    "parent": null
+  },
+  {
+    "key": "CBDO",
+    "label": "Chief Business Development Officer (CBDO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CCO",
+    "label": "Chief Commercial Officer (CCO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CEO",
+    "label": "Chief Executive Officer (CEO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CFO",
+    "label": "Chief Financial Officer (CFO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CIO",
+    "label": "Chief Information Officer (CIO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CMO",
+    "label": "Chief Marketing Officer (CMO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "COO",
+    "label": "Chief Operating Officer (COO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CPO",
+    "label": "Chief Product Officer (CPO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "CSO",
+    "label": "Chief Security Officer (CSO)",
+    "group": "Лідерство",
+    "parent": "Head Chief"
+  },
+  {
+    "key": "DevOps",
+    "label": "DevOps",
+    "group": "Операції (Ops)",
+    "parent": null
+  },
+  {
+    "key": "Security",
+    "label": "Security",
+    "group": "Операції (Ops)",
+    "parent": null
+  },
+  {
+    "key": "Information Security",
+    "label": "Information Security",
+    "group": "Операції (Ops)",
+    "parent": "Security"
+  },
+  {
+    "key": "Penetration Tester",
+    "label": "Penetration Tester",
+    "group": "Операції (Ops)",
+    "parent": "Security"
+  },
+  {
+    "key": "Security Analyst",
+    "label": "Security Analyst",
+    "group": "Операції (Ops)",
+    "parent": "Security"
+  },
+  {
+    "key": "Sysadmin",
+    "label": "Sysadmin",
+    "group": "Операції (Ops)",
+    "parent": null
+  },
+  {
+    "key": "DefTech",
+    "label": "DefTech",
+    "group": "Hardware та інженерія",
+    "parent": null
+  },
+  {
+    "key": "Avionics",
+    "label": "Avionics",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "Electronic Warfare",
+    "label": "Electronic Warfare",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "Military Software / C4ISR",
+    "label": "Military Software / C4ISR",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "UAV / Drone Engineer",
+    "label": "UAV / Drone Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "UAV / Drone Pilot",
+    "label": "UAV / Drone Pilot",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "Weapons Systems",
+    "label": "Weapons Systems",
+    "group": "Hardware та інженерія",
+    "parent": "DefTech"
+  },
+  {
+    "key": "Hardware",
+    "label": "Hardware",
+    "group": "Hardware та інженерія",
+    "parent": null
+  },
+  {
+    "key": "ASIC / Chip Design",
+    "label": "ASIC / Chip Design",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "Firmware Engineer",
+    "label": "Firmware Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "FPGA Engineer",
+    "label": "FPGA Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "Hardware Engineer",
+    "label": "Hardware Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "RF Engineer",
+    "label": "RF Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "Robotics Engineer",
+    "label": "Robotics Engineer",
+    "group": "Hardware та інженерія",
+    "parent": "Hardware"
+  },
+  {
+    "key": "Engineering / CAD Design",
+    "label": "Engineering / CAD Design",
+    "group": "Hardware та інженерія",
+    "parent": null
+  },
+  {
+    "key": "CAD Designer",
+    "label": "CAD Designer",
+    "group": "Hardware та інженерія",
+    "parent": "Engineering / CAD Design"
+  },
+  {
+    "key": "Electrical Engineering",
+    "label": "Electrical Engineering",
+    "group": "Hardware та інженерія",
+    "parent": "Engineering / CAD Design"
+  },
+  {
+    "key": "Electronics / PCB Design",
+    "label": "Electronics / PCB Design",
+    "group": "Hardware та інженерія",
+    "parent": "Engineering / CAD Design"
+  },
+  {
+    "key": "Industrial Design",
+    "label": "Industrial Design",
+    "group": "Hardware та інженерія",
+    "parent": "Engineering / CAD Design"
+  },
+  {
+    "key": "Mechanical Engineering",
+    "label": "Mechanical Engineering",
+    "group": "Hardware та інженерія",
+    "parent": "Engineering / CAD Design"
+  },
+  {
+    "key": "Marketing",
+    "label": "Marketing",
+    "group": "Маркетинг і продажі",
+    "parent": null
+  },
+  {
+    "key": "Advertising",
+    "label": "Advertising",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "Affiliate Manager",
+    "label": "Affiliate Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Advertising"
+  },
+  {
+    "key": "Media Buying",
+    "label": "Media Buying",
+    "group": "Маркетинг і продажі",
+    "parent": "Advertising"
+  },
+  {
+    "key": "PPC",
+    "label": "PPC",
+    "group": "Маркетинг і продажі",
+    "parent": "Advertising"
+  },
+  {
+    "key": "Content Marketing",
+    "label": "Content Marketing",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "Content Manager",
+    "label": "Content Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Content Marketing"
+  },
+  {
+    "key": "Content Writing",
+    "label": "Content Writer / Copywriter / Editor",
+    "group": "Маркетинг і продажі",
+    "parent": "Content Marketing"
+  },
+  {
+    "key": "Digital Marketing",
+    "label": "Digital Marketing",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "Digital Marketing Manager",
+    "label": "Digital Marketing Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Digital Marketing"
+  },
+  {
+    "key": "Social Media",
+    "label": "Social Media",
+    "group": "Маркетинг і продажі",
+    "parent": "Digital Marketing"
+  },
+  {
+    "key": "Marketing Analyst",
+    "label": "Marketing Analyst",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "Performance Marketing",
+    "label": "Performance Marketing",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "PR Manager",
+    "label": "PR Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Marketing"
+  },
+  {
+    "key": "Sales",
+    "label": "Sales",
+    "group": "Маркетинг і продажі",
+    "parent": null
+  },
+  {
+    "key": "Account Manager",
+    "label": "Account Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Sales"
+  },
+  {
+    "key": "Business Development",
+    "label": "Business Development",
+    "group": "Маркетинг і продажі",
+    "parent": "Sales"
+  },
+  {
+    "key": "Sales Leadership",
+    "label": "Sales Leadership",
+    "group": "Маркетинг і продажі",
+    "parent": "Sales"
+  },
+  {
+    "key": "Sales Manager",
+    "label": "Sales Manager",
+    "group": "Маркетинг і продажі",
+    "parent": "Sales"
+  },
+  {
+    "key": "Lead Generation",
+    "label": "Lead Generation",
+    "group": "Маркетинг і продажі",
+    "parent": null
+  },
+  {
+    "key": "SEO",
+    "label": "SEO",
+    "group": "Маркетинг і продажі",
+    "parent": null
+  },
+  {
+    "key": "HR",
+    "label": "HR",
+    "group": "Рекрутинг",
+    "parent": null
+  },
+  {
+    "key": "Recruiter",
+    "label": "Recruiter",
+    "group": "Рекрутинг",
+    "parent": null
+  },
+  {
+    "key": "Interviewer",
+    "label": "Interviewer",
+    "group": "Рекрутинг",
+    "parent": null
+  },
+  {
+    "key": "Technical Writing",
+    "label": "Technical Writing",
+    "group": "Інше",
+    "parent": null
+  },
+  {
+    "key": "Support",
+    "label": "Customer/Technical Support",
+    "group": "Інше",
+    "parent": null
+  },
+  {
+    "key": "Finances",
+    "label": "Finances",
+    "group": "Інше",
+    "parent": null
+  },
+  {
+    "key": "Accountant",
+    "label": "Accountant",
+    "group": "Інше",
+    "parent": "Finances"
+  },
+  {
+    "key": "Finance Manager",
+    "label": "Finance Manager",
+    "group": "Інше",
+    "parent": "Finances"
+  },
+  {
+    "key": "Financial Analyst",
+    "label": "Financial Analyst",
+    "group": "Інше",
+    "parent": "Finances"
+  },
+  {
+    "key": "FinOps",
+    "label": "FinOps",
+    "group": "Інше",
+    "parent": "Finances"
+  },
+  {
+    "key": "Other",
+    "label": "(Other)",
+    "group": "Інше",
+    "parent": null
+  }
+]
