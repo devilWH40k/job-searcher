@@ -12,10 +12,11 @@ import pytest
 from job_bot.config import Config
 from job_bot.sources import http_client
 from job_bot.sources.djinni import ROBOTS_URL, build_search_url, parse_search_results
+from job_bot.storage import SavedSearchStorage
 from job_bot.telegram import application as telegram_app
 from job_bot.telegram import handlers, search_state
 from job_bot.telegram.categories import category_picker
-from job_bot.telegram.formatting import format_vacancy
+from job_bot.telegram.formatting import format_saved_search, format_vacancy
 from job_bot.telegram.handlers import (
     CATEGORY_CHOICE_TEXT,
     HELP_TEXT,
@@ -98,8 +99,14 @@ def test_polling_dispatches_commands_and_closes_clients(
         callback_update(8, "more-cb", "more:aaaaaaaaaaaa:1"),
         callback_update(9, "duplicate-cb", "more:aaaaaaaaaaaa:1"),
         message_update(10, handlers.FINISH_BUTTON),
-        message_update(11, handlers.HELP_BUTTON),
-        message_update(12, "/unknown", True),
+        message_update(11, "/list", True),
+        message_update(12, "/createsearch", True),
+        callback_update(13, "save-source", "source:djinni:aaaaaaaaaaaa"),
+        callback_update(14, "save-skip", "skip:aaaaaaaaaaaa"),
+        callback_update(15, "save-no", "categories:aaaaaaaaaaaa:no"),
+        message_update(16, "/list", True),
+        message_update(17, handlers.HELP_BUTTON),
+        message_update(18, "/unknown", True),
     ]
     commands = []
     menu_buttons = []
@@ -160,7 +167,7 @@ def test_polling_dispatches_commands_and_closes_clients(
                 "chat": chat,
                 "text": replies[-1],
             }
-            if len(replies) == (17 if djinni_status == 200 else 9):
+            if len(replies) == (24 if djinni_status == 200 else 16):
                 applications[0].stop_running()
         else:
             raise AssertionError(f"Unexpected Telegram method: {method}")
@@ -194,6 +201,23 @@ def test_polling_dispatches_commands_and_closes_clients(
         )
     )
 
+    store = SavedSearchStorage(tmp_path / "jobs.sqlite3")
+    saved = asyncio.run(store.list_for_user(42))
+    assert len(saved) == 1
+    assert saved[0].keyword == "" and saved[0].categories == ()
+    saved_flow = [
+        "Search finished.\n\n" + HELP_TEXT,
+        "\U0001f4ed No saved searches yet. Create one with /createsearch.",
+        "\U0001f4be Create a saved search",
+        START_TEXT,
+        KEYWORD_TEXT,
+        CATEGORY_CHOICE_TEXT,
+        "\u2705 Search saved. Use /list to find it later.\n\n"
+        + format_saved_search(saved[0]),
+        format_saved_search(saved[0]),
+        HELP_TEXT,
+        UNKNOWN_COMMAND_TEXT,
+    ]
     if djinni_status == 200:
         matches = [v for v in parse_search_results(djinni_html) if v.remote is True]
         assert replies == [
@@ -203,9 +227,7 @@ def test_polling_dispatches_commands_and_closes_clients(
             CATEGORY_CHOICE_TEXT,
             category_picker(search_state.SearchSession())[0],
             *[format_vacancy(v) for v in matches],
-            "Search finished.\n\n" + HELP_TEXT,
-            HELP_TEXT,
-            UNKNOWN_COMMAND_TEXT,
+            *saved_flow,
         ]
         assert [
             markup["inline_keyboard"][0][0]["url"]
@@ -215,28 +237,30 @@ def test_polling_dispatches_commands_and_closes_clients(
         ] == [v.url for v in matches]
     else:
         assert "access is unavailable" in replies[5]
-        assert replies[6:] == [
-            "Search finished.\n\n" + HELP_TEXT,
-            HELP_TEXT,
-            UNKNOWN_COMMAND_TEXT,
-        ]
-        assert len(buttons) == 8  # Source and category pickers.
-        assert not (tmp_path / "jobs.sqlite3").exists()
+        assert replies[6:] == saved_flow
+        assert len(buttons) == 14
     assert len(djinni_requests) == 1
     assert polls[0]["timeout"] == ["30"]
     assert json.loads(polls[0]["allowed_updates"][0]) == ["message", "callback_query"]
-    assert polls[-1]["offset"] == ["13"]
-    assert len(callback_answers) == 7
+    assert polls[-1]["offset"] == ["19"]
+    assert len(callback_answers) == 10
     assert len(category_edits) == 3
-    assert "no longer current" in callback_answers[-1]["text"][0]
-    assert [c["command"] for c in commands] == ["start", "help", "finish"]
+    assert "no longer current" in callback_answers[6]["text"][0]
+    assert [c["command"] for c in commands] == [
+        "start",
+        "createsearch",
+        "list",
+        "help",
+        "finish",
+    ]
     keyboards = [markup for markup in buttons if "keyboard" in markup]
-    assert len(keyboards) == 3
+    assert len(keyboards) == 4
     assert all(
         markup["is_persistent"] and markup["resize_keyboard"] for markup in keyboards
     )
     assert keyboards[0]["keyboard"] == [
-        [{"text": handlers.FIND_BUTTON}, {"text": handlers.HELP_BUTTON}],
+        [{"text": handlers.FIND_BUTTON}, {"text": handlers.CREATE_BUTTON}],
+        [{"text": handlers.LIST_BUTTON}, {"text": handlers.HELP_BUTTON}],
         [{"text": handlers.FINISH_BUTTON}],
     ]
     assert menu_buttons == [{"type": "commands"}]

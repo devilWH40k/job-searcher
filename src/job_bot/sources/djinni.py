@@ -119,6 +119,25 @@ def _parse_results(
                 tag.get_text(" ", strip=True)
                 for tag in details.select(".location-text")
             )
+        views = applications = applications_period_days = None
+        updated_text = None
+        for span in card.select("span.text-nowrap"):
+            text = " ".join(span.get_text(" ", strip=True).split())
+            view_match = re.fullmatch(r"([0-9 ]{1,20}) перегляд(?:и|ів)?", text)
+            application_match = re.fullmatch(
+                r"([0-9 ]{1,20}) відгук(?:и|ів)?"
+                r"(?: за ([0-9]{1,5}) (?:день|дні|днів))?",
+                text,
+            )
+            if view_match:
+                views = int(view_match[1].replace(" ", ""))
+            elif application_match:
+                applications = int(application_match[1].replace(" ", ""))
+                applications_period_days = (
+                    int(application_match[2]) if application_match[2] else None
+                )
+            elif text.startswith("оновлено ") and len(text) <= 100:
+                updated_text = text
         vacancies.append(
             Vacancy(
                 source="djinni",
@@ -132,6 +151,10 @@ def _parse_results(
                 else None,
                 remote=remote,
                 first_seen_at=observed_at,
+                views=views,
+                applications=applications,
+                applications_period_days=applications_period_days,
+                updated_text=updated_text,
                 # Listings show update times without an offset, not a reliably
                 # timezone-aware publication timestamp. Leave published_at unknown.
             )

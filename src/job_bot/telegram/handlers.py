@@ -26,7 +26,7 @@ from job_bot.sources.djinni_categories import (
 )
 from job_bot.sources.http_client import SourceAccessError, SourceError
 from job_bot.telegram.categories import PAGE_SIZE, category_picker
-from job_bot.telegram.formatting import format_vacancy
+from job_bot.telegram.formatting import format_saved_search, format_vacancy
 from job_bot.telegram.search_state import SESSION_SECONDS, SearchSession
 
 logger = logging.getLogger(__name__)
@@ -34,13 +34,15 @@ CARD_INTERVAL_SECONDS = 1.1
 FIND_BUTTON = "🔍 Find a job"
 HELP_BUTTON = "💡 Help"
 FINISH_BUTTON = "✅ Finish search"
+CREATE_BUTTON = "💾 Create search"
+LIST_BUTTON = "📋 Saved searches"
 MENU_TEXT = "🧭 Use the buttons below to find a job, get help, or finish your search."
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     """Show persistent command shortcuts in Telegram's input keyboard area."""
     return ReplyKeyboardMarkup(
-        [[FIND_BUTTON, HELP_BUTTON], [FINISH_BUTTON]],
+        [[FIND_BUTTON, CREATE_BUTTON], [LIST_BUTTON, HELP_BUTTON], [FINISH_BUTTON]],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Enter a keyword or choose an action",
@@ -56,6 +58,8 @@ SEARCHING_TEXT = "Searching Djinni for vacancies..."
 HELP_TEXT = (
     "🧭 Your job search menu\n\n"
     "🔍 /start — Find a job\n"
+    "💾 /createsearch — Save filters for later\n"
+    "📋 /list — Your saved searches\n"
     "💡 /help — Help & commands\n"
     "✅ /finish — Finish search\n\n"
     "Choose Djinni, enter a keyword or Skip, then choose whether to add categories.\n"
@@ -102,6 +106,48 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def _private_owner(update: Update) -> int | None:
+    """Keep saved filters out of group chats and use stable numeric ownership."""
+    if (
+        update.effective_user is None
+        or update.effective_chat is None
+        or update.effective_chat.type != "private"
+    ):
+        if update.effective_message is not None:
+            await _reply(
+                update.effective_message,
+                "Use saved searches in a private chat with this bot.",
+            )
+        return None
+    return update.effective_user.id
+
+
+async def create_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Start the same setup wizard, saving filters instead of fetching jobs."""
+    if await _private_owner(update) is None or update.effective_message is None:
+        return
+    state = SearchSession(intent="save", stage="source")
+    _set_session(update, context, state)
+    await _reply(
+        update.effective_message,
+        "💾 Create a saved search",
+        reply_markup=main_keyboard(),
+    )
+    await _reply(
+        update.effective_message,
+        START_TEXT,
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "Djinni", callback_data=f"source:djinni:{state.token}"
+                    )
+                ]
+            ]
+        ),
+    )
+
+
 def _get_session(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> SearchSession | None:
@@ -130,13 +176,25 @@ async def select_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     query = update.callback_query
     if query is None:
         return
-    if query.data != "source:djinni":
+    previous = _get_session(update, context)
+    creating = (
+        previous is not None
+        and previous.intent == "save"
+        and previous.stage == "source"
+        and query.data == f"source:djinni:{previous.token}"
+    )
+    if query.data != "source:djinni" and not creating:
         await query.answer("That source is not available.")
+        return
+    if not creating and previous is not None and previous.intent == "save":
+        await query.answer(
+            "This source menu is no longer current. Send /start to search."
+        )
         return
     await query.answer()
     if update.effective_message is None or context.user_data is None:
         return
-    state = SearchSession()
+    state = replace(previous, stage="keyword") if creating else SearchSession()
     _set_session(update, context, state)
     await _reply(
         update.effective_message,
@@ -211,9 +269,7 @@ async def choose_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         text, markup = category_picker(state)
         await _reply(update.effective_message, text, reply_markup=markup)
     else:
-        state.stage = "results"
-        await _reply(update.effective_message, SEARCHING_TEXT)
-        await _send_next_batch(update.effective_message, context, state)
+        await _complete_setup(update, context, state)
 
 
 async def select_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -283,7 +339,9 @@ async def select_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     candidate.touched_at = monotonic()
     await query.answer()
     text, markup = (
-        (SEARCHING_TEXT, None) if action == "d" else category_picker(candidate)
+        (("Saving search..." if candidate.intent == "save" else SEARCHING_TEXT), None)
+        if action == "d"
+        else category_picker(candidate)
     )
     try:
         await query.edit_message_text(text, parse_mode=None, reply_markup=markup)
@@ -295,7 +353,263 @@ async def select_categories(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await query.edit_message_text(text, parse_mode=None, reply_markup=markup)
     _set_session(update, context, candidate)
     if action == "d" and update.effective_message is not None:
-        await _send_next_batch(update.effective_message, context, candidate)
+        await _complete_setup(update, context, candidate, show_status=False)
+
+
+async def _complete_setup(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    state: SearchSession,
+    *,
+    show_status: bool = True,
+) -> None:
+    message = update.effective_message
+    if message is None:
+        return
+    if state.intent == "save":
+        owner = await _private_owner(update)
+        if owner is None:
+            return
+        state.stage = "ready_to_save"
+        try:
+            saved = await context.application.bot_data["saved_searches"].save(
+                owner, state.source, state.keyword, state.categories
+            )
+        except sqlite3.Error, OSError:
+            logger.error("Saved search could not be stored.")
+            await _reply(
+                message,
+                "I couldn't save your search. Try again or use /finish.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "Try saving again",
+                                callback_data=f"savesearch:{state.token}",
+                            )
+                        ]
+                    ]
+                ),
+            )
+            return
+        if context.user_data is not None and update.effective_chat is not None:
+            context.user_data.get("search_sessions", {}).pop(
+                update.effective_chat.id, None
+            )
+        await _reply(
+            message,
+            "✅ Search saved. Use /list to find it later.\n\n"
+            + format_saved_search(saved),
+            parse_mode=ParseMode.HTML,
+            reply_markup=_saved_search_markup(saved.id),
+        )
+    else:
+        state.stage = "results"
+        if show_status:
+            await _reply(message, SEARCHING_TEXT)
+        await _send_next_batch(message, context, state)
+
+
+def _saved_search_markup(search_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "▶️ Run search", callback_data=f"savedrun:{search_id}"
+                ),
+                InlineKeyboardButton(
+                    "🗑️ Delete", callback_data=f"saveddelete:{search_id}"
+                ),
+            ]
+        ]
+    )
+
+
+async def retry_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None:
+        return
+    state = _get_session(update, context)
+    if (
+        state is None
+        or state.intent != "save"
+        or state.stage != "ready_to_save"
+        or query.data != f"savesearch:{state.token}"
+    ):
+        await query.answer("This button is no longer current. Use /createsearch.")
+        return
+    await query.answer()
+    await _complete_setup(update, context, state)
+
+
+async def list_searches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display six saved-filter cards per page, always querying by owner."""
+    query = update.callback_query
+    offset = 0
+    if query is not None:
+        data = query.data
+        if (
+            not isinstance(data, str)
+            or not data.startswith("savedlist:")
+            or not data[10:].isascii()
+            or not data[10:].isdigit()
+            or len(data[10:]) > 7
+        ):
+            await query.answer("That saved-search page is unavailable.")
+            return
+        offset = int(data[10:])
+        await query.answer()
+    owner = await _private_owner(update)
+    message = update.effective_message
+    if owner is None or message is None:
+        return
+    try:
+        searches = await context.application.bot_data["saved_searches"].list_for_user(
+            owner, offset=offset
+        )
+    except sqlite3.Error, OSError:
+        logger.error("Saved searches could not be listed.")
+        await _reply(
+            message, "I couldn't load your saved searches. Try /list again later."
+        )
+        return
+    if not searches:
+        await _reply(
+            message,
+            "📭 No saved searches yet. Create one with /createsearch."
+            if offset == 0
+            else "No more saved searches. Use /createsearch to add one.",
+        )
+        return
+    for index, saved in enumerate(searches[:6]):
+        await asyncio.sleep(CARD_INTERVAL_SECONDS)
+        rows = list(_saved_search_markup(saved.id).inline_keyboard)
+        if len(searches) > 6 and index == 5:
+            rows.append(
+                (
+                    InlineKeyboardButton(
+                        "More saved searches", callback_data=f"savedlist:{offset + 6}"
+                    ),
+                )
+            )
+        await _reply(
+            message,
+            format_saved_search(saved),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+async def run_saved_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Reload owned filters from SQLite and start a fresh results cursor."""
+    query = update.callback_query
+    if query is None:
+        return
+    data = query.data
+    if (
+        not isinstance(data, str)
+        or not data.startswith("savedrun:")
+        or not data[9:].isascii()
+        or not data[9:].isdigit()
+        or len(data[9:]) > 19
+        or int(data[9:]) >= 2**63
+    ):
+        await query.answer("That saved search is unavailable.")
+        return
+    await query.answer()
+    owner = await _private_owner(update)
+    if owner is None or update.effective_message is None:
+        return
+    try:
+        saved = await context.application.bot_data["saved_searches"].get_for_user(
+            owner, int(data[9:])
+        )
+    except sqlite3.Error, OSError:
+        logger.error("Saved search could not be loaded.")
+        await _reply(
+            update.effective_message,
+            "I couldn't load that search. Try /list again later.",
+        )
+        return
+    if saved is None or saved.source != "djinni":
+        await _reply(
+            update.effective_message,
+            "That saved search is unavailable. Use /list to see yours.",
+        )
+        return
+    state = SearchSession(
+        source=saved.source,
+        keyword=saved.keyword,
+        categories=saved.categories,
+        stage="results",
+    )
+    _set_session(update, context, state)
+    await _reply(update.effective_message, SEARCHING_TEXT)
+    await _send_next_batch(update.effective_message, context, state)
+
+
+async def delete_saved_search(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Remove owned filters and replace the clicked card with a confirmation."""
+    query = update.callback_query
+    if query is None:
+        return
+    data = query.data
+    if (
+        not isinstance(data, str)
+        or not data.startswith("saveddelete:")
+        or not data[12:].isascii()
+        or not data[12:].isdigit()
+        or len(data[12:]) > 19
+        or int(data[12:]) >= 2**63
+    ):
+        await query.answer("That saved search is unavailable.")
+        return
+    await query.answer()
+    owner = await _private_owner(update)
+    message = update.effective_message
+    if owner is None or message is None:
+        return
+    try:
+        deleted = await context.application.bot_data["saved_searches"].delete_for_user(
+            owner, int(data[12:])
+        )
+    except sqlite3.Error, OSError:
+        logger.error("Saved search could not be deleted.")
+        await _reply(message, "I couldn't delete that search. Try again from /list.")
+        return
+    if not deleted:
+        await _reply(
+            message,
+            "That saved search is unavailable or already deleted. "
+            "Use /list to see yours.",
+        )
+        return
+    text = (
+        "🗑️ Saved search deleted. Use /list to see your searches "
+        "or /createsearch to add one."
+    )
+    markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📋 Refresh saved searches", callback_data="savedlist:0"
+                )
+            ]
+        ]
+    )
+    try:
+        await query.edit_message_text(text, parse_mode=None, reply_markup=markup)
+    except RetryAfter as exc:
+        delay = exc.retry_after
+        await asyncio.sleep(
+            delay.total_seconds() if isinstance(delay, timedelta) else delay
+        )
+        await _reply(message, text, reply_markup=markup)
+    except TelegramError:
+        logger.warning("Deleted-search card could not be updated.")
+        await _reply(message, text, reply_markup=markup)
 
 
 async def search_keyword(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
