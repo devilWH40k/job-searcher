@@ -99,11 +99,46 @@ retain the existing remote-only behavior. Source and keyword entry make no vacan
 requests until No or Search is pressed. If Yes is selected, choose at least one
 category before pressing Search. Failed searches offer Try again.
 
-Telegram's command menu beside the message input is configured at startup with
-`/start`, `/help`, and `/finish`. `/finish` also ends a search during setup. Menu
+A persistent reply keyboard provides **Find a job**, **Create search**,
+**Saved searches**, **Help**, and **Finish search** as large buttons in Telegram's
+keyboard area. Send `/start` to display it. If hidden, use the keyboard toggle beside the message input to
+reopen it. Buttons work during setup and results; they are handled as commands,
+not search keywords. Source selection and search filters remain inline buttons.
+
+Telegram's command menu beside the message input is also configured at startup with
+`/start` (🔍 Find a job), `/createsearch` (💾 Save search filters),
+`/list` (📋 Your saved searches), `/help` (💡 Help & commands), and `/finish`
+(✅ Finish search). `/finish` also ends a search during setup. Menu
 visibility can vary by Telegram client; typing `/` also shows registered commands.
 Restart the bot after updating to register the new commands. If registration fails,
 a warning is logged and the commands still work when entered manually.
+
+Saved searches are available in a **private chat** with the bot:
+
+1. Send `/createsearch` (or tap **Create search**).
+2. Choose Djinni, enter a keyword or Skip, and choose Yes/No for categories.
+3. With categories, tap **Save search** after selecting them. With No, the
+   filters are saved immediately. Creation makes no requests to Djinni.
+4. Send `/list` (or tap **Saved searches**) to see cards with source, keyword,
+   categories, scope, and creation time in UTC. An empty list points to
+   `/createsearch`. Lists show six cards at a time, with **More saved searches**
+   when needed.
+5. Tap **Run search** on a card to fetch results using the saved filters. The
+   existing six-vacancy batches, cache, and Finish controls then apply.
+6. Tap **Delete** on a saved-search card to remove it immediately. The card shows
+   a deletion confirmation with **Refresh saved searches**, which reloads the list
+   from the beginning. Older copies of deleted cards can no longer run the search.
+
+Saved filters persist in the same SQLite database across restarts. Ownership uses
+Telegram's stable numeric user ID, so changing a username does not affect access.
+Every lookup checks the requesting user's ID. Identical normalized filters reuse
+an existing saved search rather than creating duplicates. No username, phone
+number, or email is stored. `/finish` or `/start` cancels unfinished creation
+without deleting saved searches. Saving failures keep filters available for retry.
+`/list` does not interrupt an unfinished wizard; running a card starts a new search.
+Deletion checks the owner's Telegram ID in the database and only removes the
+saved filters. Existing vacancy records, cached results, and a search already
+running are preserved. Scheduled alerts and editing are not implemented.
 
 The picker includes all 157 categories in 11 groups from the supplied Djinni tree.
 It supports up to 50 selected items, matching the inspected site's limit. Broad
@@ -115,6 +150,13 @@ Results retain Djinni's order. Entries not explicitly marked `Тільки ві�
 are excluded. Duplicate vacancy IDs are skipped across batches. The final batch
 may contain fewer than six cards, and no further button is shown once results end.
 Cards are paced to reduce Telegram rate limits.
+Djinni cards also show available view and application counts and an English
+relative update label, for example **63 views · 9 applications · Updated 2 hours
+ago**. Application reporting windows such as "in the last 30 days" are preserved.
+Missing counters are omitted; zero is displayed when the source explicitly reports
+it. Relative times describe the fetched snapshot and are not inferred publication
+timestamps. The original update label and counters are saved in SQLite; new columns
+are added automatically while preserving existing records.
 
 Successful source pages, including empty results, are cached in memory for five
 minutes by normalized keyword, category combination, and page, with at most 128
@@ -133,9 +175,11 @@ Live listings can change between page requests; duplicate IDs are suppressed.
 
 Each successful fetch also upserts vacancies into
 `data/vacancies.sqlite3`, uniquely by source and vacancy ID, preserving when each
-vacancy was first seen. SQLite runs in a worker thread and stores no Telegram
-user data, search keywords, or selected filters. Restarting the bot clears the in-memory cache and
-search sessions, while saved vacancies remain available in SQLite.
+vacancy was first seen. SQLite operations run in a worker thread. The separate
+`saved_searches` table stores the numeric Telegram owner ID, source, keyword,
+categories, scope, and UTC creation time only when `/createsearch` is completed.
+Ordinary search criteria remain in memory. Restarting clears the result cache and
+active wizard/cursor state; saved filters and vacancies remain in SQLite.
 Existing Work.ua records remain in the same database. Djinni records use a
 different source key, so matching numeric IDs do not overwrite Work.ua data.
 
@@ -233,8 +277,17 @@ View the latest saved vacancies:
 
 These are read-only SQL queries. The CLI creates an empty database if the path
 does not exist, so complete a successful bot search first. The database contains
-vacancy records; the five-minute query cache and per-user pagination state live
-only in memory. A `salary_text` value such as `$$` remains a relative band.
+vacancy records and explicitly saved filters; the five-minute result cache and
+per-user pagination state live only in memory. A `salary_text` value such as `$$` remains a relative band.
+
+Inspect the saved-search table locally (these filters are private user data):
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 -m sqlite3 data/vacancies.sqlite3 "SELECT id, source, keyword, categories, remote_only, created_at FROM saved_searches ORDER BY id DESC LIMIT 10;"
+```
+
+The `saved_searches` table is created lazily on first use of saving or listing.
+Existing vacancy data is preserved; no database reset or manual migration is needed.
 
 ## Development
 

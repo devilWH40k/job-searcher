@@ -38,11 +38,18 @@ class Vacancy:
     remote: bool | None = None
     published_at: datetime | None = None
     first_seen_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    views: int | None = None
+    applications: int | None = None
+    applications_period_days: int | None = None
+    updated_text: str | None = None
 
     def __post_init__(self) -> None:
         for value in (self.first_seen_at, self.published_at):
             if value is not None and value.utcoffset() is None:
                 raise ValueError("Vacancy timestamps must be timezone-aware.")
+        for value in (self.views, self.applications, self.applications_period_days):
+            if value is not None and value < 0:
+                raise ValueError("Vacancy statistics must be nonnegative.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,3 +58,16 @@ class VacancyPage:
 
     vacancies: tuple[Vacancy, ...]
     next_page: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SavedSearch:
+    """A reusable set of filters owned by one Telegram numeric user ID."""
+
+    id: int
+    user_id: int
+    source: str
+    keyword: str
+    categories: tuple[str, ...]
+    remote_only: bool
+    created_at: datetime

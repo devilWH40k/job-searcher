@@ -17,13 +17,23 @@ from telegram.ext import (
 from job_bot.config import Config
 from job_bot.services.job_search import JobSearchService
 from job_bot.sources.djinni import USER_AGENT, DjinniClient
-from job_bot.storage import VacancyStorage
+from job_bot.storage import SavedSearchStorage, VacancyStorage
 from job_bot.telegram.handlers import (
+    CREATE_BUTTON,
+    FIND_BUTTON,
+    FINISH_BUTTON,
+    HELP_BUTTON,
+    LIST_BUTTON,
     choose_categories,
+    create_search,
+    delete_saved_search,
     finish,
     help_command,
+    list_searches,
     load_more,
     on_error,
+    retry_save,
+    run_saved_search,
     search_keyword,
     select_categories,
     select_source,
@@ -42,9 +52,11 @@ def create_application(config: Config) -> Application:
         try:
             await application.bot.set_my_commands(
                 [
-                    BotCommand("start", "Start a new search"),
-                    BotCommand("help", "Show available commands"),
-                    BotCommand("finish", "Finish the current search"),
+                    BotCommand("start", "🔍 Find a job"),
+                    BotCommand("createsearch", "💾 Save search filters"),
+                    BotCommand("list", "📋 Your saved searches"),
+                    BotCommand("help", "💡 Help & commands"),
+                    BotCommand("finish", "✅ Finish search"),
                 ]
             )
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
@@ -65,6 +77,9 @@ def create_application(config: Config) -> Application:
         )
         application.bot_data["job_search"] = JobSearchService(
             DjinniClient(client), VacancyStorage(config.database_path)
+        )
+        application.bot_data["saved_searches"] = SavedSearchStorage(
+            config.database_path
         )
 
     async def shutdown_search(application: Application) -> None:
@@ -89,10 +104,14 @@ def create_application(config: Config) -> Application:
         .build()
     )
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("createsearch", create_search))
+    application.add_handler(CommandHandler("list", list_searches))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("finish", finish))
     application.add_handler(
-        CallbackQueryHandler(select_source, pattern=r"^source:djinni$")
+        CallbackQueryHandler(
+            select_source, pattern=r"^source:djinni(?::[0-9a-f]{12})?$"
+        )
     )
     application.add_handler(CallbackQueryHandler(select_categories, pattern=r"^cat:"))
     application.add_handler(CallbackQueryHandler(skip_keyword, pattern=r"^skip:"))
@@ -100,9 +119,24 @@ def create_application(config: Config) -> Application:
         CallbackQueryHandler(choose_categories, pattern=r"^categories:")
     )
     application.add_handler(CallbackQueryHandler(finish, pattern=r"^finish:"))
+    application.add_handler(CallbackQueryHandler(retry_save, pattern=r"^savesearch:"))
+    application.add_handler(CallbackQueryHandler(list_searches, pattern=r"^savedlist:"))
+    application.add_handler(
+        CallbackQueryHandler(run_saved_search, pattern=r"^savedrun:")
+    )
+    application.add_handler(
+        CallbackQueryHandler(delete_saved_search, pattern=r"^saveddelete:")
+    )
     application.add_handler(
         CallbackQueryHandler(load_more, pattern=r"^more:[0-9a-f]{12}:[0-9]+$")
     )
+    application.add_handler(MessageHandler(filters.Text([FIND_BUTTON]), start))
+    application.add_handler(
+        MessageHandler(filters.Text([CREATE_BUTTON]), create_search)
+    )
+    application.add_handler(MessageHandler(filters.Text([LIST_BUTTON]), list_searches))
+    application.add_handler(MessageHandler(filters.Text([HELP_BUTTON]), help_command))
+    application.add_handler(MessageHandler(filters.Text([FINISH_BUTTON]), finish))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, search_keyword)
     )

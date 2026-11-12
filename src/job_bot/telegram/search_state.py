@@ -15,7 +15,10 @@ class SearchSession:
     """A selected source, unsent cards, and a version for stale-button checks."""
 
     source: str = "djinni"
-    stage: Literal["keyword", "category_choice", "categories", "results"] = "keyword"
+    intent: Literal["search", "save"] = "search"
+    stage: Literal[
+        "source", "keyword", "category_choice", "categories", "results", "ready_to_save"
+    ] = "keyword"
     keyword: str = ""
     categories: tuple[str, ...] = ()
     category_group: int | None = None

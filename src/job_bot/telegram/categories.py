@@ -16,6 +16,7 @@ def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
     if len(summary) > 1400:
         summary = summary[:1399] + "…"
     rows = []
+    action_label = "Save search" if state.intent == "save" else "Search"
     title = "Choose one or more categories"
     if state.category_group is None:
         for index, group in enumerate(CATEGORY_GROUPS):
@@ -80,7 +81,7 @@ def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
     rows.append(
         [
             InlineKeyboardButton(
-                f"Search ({len(selected)} selected)",
+                f"{action_label} ({len(selected)} selected)",
                 callback_data=state.category_callback("d"),
             )
         ]
@@ -95,6 +96,6 @@ def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
         )
     text = (
         f"{title}\nSelected: {summary}\n\n"
-        "Select multiple items across groups, then tap Search."
+        f"Select multiple items across groups, then tap {action_label}."
     )
     return text, InlineKeyboardMarkup(rows)
