@@ -311,6 +311,87 @@ official key encoding, category-aware caching, stale pickers, and category reten
 when loading more results. The category catalog is a dated snapshot; it is not
 downloaded dynamically or inferred from display names.
 
+## GitHub Actions and Lightsail deployment
+
+The **Checks** workflow runs formatting, linting and offline tests on every push
+and pull request, using Python 3.14.2 and `uv.lock`. Set its **Python checks** job
+as a required branch protection check for `main` if desired.
+
+The **Deploy to Lightsail** workflow is manually started from GitHub's Actions
+tab, with `main` selected. It reruns the checks and deploys that exact commit;
+merging code alone does not restart production. Deployments run one at a time.
+
+One-time setup:
+
+1. In repository **Settings → Environments**, create `production` and restrict
+   deployment branches to `main`.
+2. Add these environment secrets:
+
+   | Secret | Value |
+   | --- | --- |
+   | `LIGHTSAIL_HOST` | Instance public IPv4 address or hostname (prefer a static IP) |
+   | `LIGHTSAIL_SSH_KEY` | Private SSH key for the `ubuntu` account, without a passphrase |
+   | `LIGHTSAIL_KNOWN_HOSTS` | Verified OpenSSH known_hosts entry for that host |
+
+   Prefer a dedicated deployment key: put its public key in the server's
+   `/home/ubuntu/.ssh/authorized_keys` and keep the private key only in GitHub's
+   environment secret. This key grants access to the server; restrict who can
+   edit workflows or deploy. Never put it in the repository.
+
+3. Obtain the host key through your trusted Lightsail browser SSH session:
+
+   ```bash
+   cat /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+   Build the secret as `YOUR_HOST ssh-ed25519 AAAA...`, using the key type and
+   base64 key from that command and exactly the host in `LIGHTSAIL_HOST`.
+   The workflow requires host verification and will fail if it does not match.
+
+4. Ensure the Lightsail firewall permits SSH from the runner's network.
+   Standard GitHub-hosted runners use changing public IPs; a rule allowing only
+   your laptop will block deployment. Use controlled runner/network access if
+   you need a fixed allowlisted source. Do not disable host verification to fix
+   connectivity. CI works independently of this SSH setup.
+5. Confirm the existing server setup matches the deployment script:
+   `/home/ubuntu/job-searcher` is a clean Git checkout with the public GitHub
+   repository as `origin`; uv is `/home/ubuntu/.local/bin/uv`; the `ubuntu` user
+   can run `sudo -n systemctl start/stop/is-active job-searcher` and write
+   `/var/lib/job-searcher/backups`.
+
+The existing systemd service must run
+`/home/ubuntu/job-searcher/.venv/bin/python -m job_bot` with
+`WorkingDirectory=/var/lib/job-searcher` and its production token loaded from
+`/etc/job-searcher/bot.env`. The workflow does not copy your local `.env`, token,
+or database. Adapt `scripts/deploy-lightsail.sh` before use if your paths differ.
+
+Development flow: make a feature locally with the test bot, push a branch, open
+a pull request, wait for checks, merge into `main`, then choose **Actions → Deploy
+to Lightsail → Run workflow → main**. No AWS API credentials are needed.
+
+Deployment stops the bot briefly, backs up SQLite, checks out the tested commit,
+installs locked production dependencies and starts the service. A ten-second
+systemd check confirms it stayed active; this is not an end-to-end Telegram test.
+The server checkout becomes detached at the deployed commit; later deployments
+fetch `main` explicitly. SQLite backups stay on the instance and accumulate;
+periodically copy needed backups elsewhere and remove old ones.
+
+If deployment fails after stopping the bot, it leaves the service stopped.
+Read the failed Actions step and recover via your trusted SSH session:
+
+```bash
+cd /home/ubuntu/job-searcher
+# Use the previous commit printed in the deployment log.
+git checkout --detach PREVIOUS_COMMIT_SHA
+/home/ubuntu/.local/bin/uv sync --locked --no-dev --python 3.14.2
+sudo systemctl start job-searcher
+sudo systemctl status job-searcher --no-pager
+```
+
+Review schema compatibility before rolling back code. Database backups are under
+`/var/lib/job-searcher/backups`; restoring one is a separate, deliberate operation
+while the bot is stopped because it replaces data saved since that backup.
+
 ## Structure
 
 ```text
