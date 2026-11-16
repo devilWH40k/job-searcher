@@ -6,6 +6,12 @@ from job_bot.sources.djinni_categories import CATEGORIES, CATEGORY_GROUPS
 from job_bot.telegram.search_state import SearchSession
 
 PAGE_SIZE = 10
+CATEGORY_LABEL_WIDTH = 44
+
+
+def _category_label(text: str) -> str:
+    """Visually shift centered button text left with nonbreaking padding."""
+    return text[:60].ljust(CATEGORY_LABEL_WIDTH, "\u00a0")
 
 
 def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
@@ -45,12 +51,13 @@ def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
         start = state.category_page * PAGE_SIZE
         for index, category in items[start : start + PAGE_SIZE]:
             mark = "✓" if category.key in selected else "□"
-            indent = "↳ " if category.parent is not None else ""
-            label = f"{mark} {indent}{category.label}"
+            indent = "\u00a0\u00a0\u21b3 " if category.parent is not None else ""
+            label = f"{indent}{mark} {category.label}"
             rows.append(
                 [
                     InlineKeyboardButton(
-                        label[:60], callback_data=state.category_callback("t", index)
+                        _category_label(label),
+                        callback_data=state.category_callback("t", index),
                     )
                 ]
             )
