@@ -12,7 +12,7 @@ import pytest
 from test_search_flow import make_context, make_update
 
 from job_bot.models import Vacancy, VacancyPage
-from job_bot.storage import SavedSearchStorage, VacancyStorage
+from job_bot.storage import RecentVacancyStorage, SavedSearchStorage, VacancyStorage
 from job_bot.telegram import handlers
 from job_bot.telegram.formatting import format_saved_search
 
@@ -31,6 +31,7 @@ def private_update(
 def saved_context(path: Path) -> MagicMock:
     context = make_context(VacancyPage(()))
     context.application.bot_data["saved_searches"] = SavedSearchStorage(path)
+    context.application.bot_data["recent_vacancies"] = RecentVacancyStorage(path)
     return context
 
 

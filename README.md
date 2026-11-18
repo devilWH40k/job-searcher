@@ -9,8 +9,10 @@ The last card has **Load 6 more** when additional results are available.
 Djinni's `$`–`$$$$` indicators are relative salary bands, not salary amounts.
 `/help` describes the flow. Djinni is currently the only available source;
 keyword/category searches remain remote-only. Skip + No searches all public jobs.
-A `/search` command and other filters are
-not implemented.
+`/search` opens the same wizard; `/search Python Developer` immediately searches
+Djinni for that keyword with the existing remote-only behavior.
+`/recent` shows up to six vacancies most recently discovered for you through manual
+searches or tracking, without making a new source request.
 
 ## Setup
 
@@ -100,14 +102,17 @@ requests until No or Search is pressed. If Yes is selected, choose at least one
 category before pressing Search. Failed searches offer Try again.
 
 A persistent reply keyboard provides **Find a job**, **Create search**,
-**Saved searches**, **Help**, and **Finish search** as large buttons in Telegram's
-keyboard area. Send `/start` to display it. If hidden, use the keyboard toggle beside the message input to
+**Saved searches**, **Help**, **Track**, and **Finish search** as large buttons in Telegram's
+keyboard area. **Track** opens the same saved-search / create-and-track menu as
+`/track`. Send `/start` to display it. If hidden, use the keyboard toggle beside the message input to
 reopen it. Buttons work during setup and results; they are handled as commands,
 not search keywords. Source selection and search filters remain inline buttons.
 
 Telegram's command menu beside the message input is also configured at startup with
-`/start` (🔍 Find a job), `/createsearch` (💾 Save search filters),
-`/list` (📋 Your saved searches), `/help` (💡 Help & commands), and `/finish`
+`/start` (🔍 Find a job), `/search`, `/recent`,
+`/createsearch` (💾 Save search filters),
+`/list` (📋 Your saved searches), `/track`, `/untrack`,
+`/help` (💡 Help & commands), and `/finish`
 (✅ Finish search). `/finish` also ends a search during setup. Menu
 visibility can vary by Telegram client; typing `/` also shows registered commands.
 Restart the bot after updating to register the new commands. If registration fails,
@@ -136,9 +141,73 @@ an existing saved search rather than creating duplicates. No username, phone
 number, or email is stored. `/finish` or `/start` cancels unfinished creation
 without deleting saved searches. Saving failures keep filters available for retry.
 `/list` does not interrupt an unfinished wizard; running a card starts a new search.
-Deletion checks the owner's Telegram ID in the database and only removes the
-saved filters. Existing vacancy records, cached results, and a search already
-running are preserved. Scheduled alerts and editing are not implemented.
+Deletion checks the owner's Telegram ID in the database. Existing vacancy
+records, cached results, and a search already
+running are preserved. Deleting a saved search also stops its tracking and removes
+its queued alerts. Editing saved filters is not implemented.
+
+### Recent vacancies
+
+Send `/recent` in a **private chat** to see up to six distinct vacancies discovered
+for you through the manual search wizard, `/search <keywords>`, running saved
+searches, or `/track` checks. Cards include the usual details and original links.
+Newer discovery batches appear first, with source order preserved within a batch.
+Finding the same vacancy again updates its snapshot without promoting it ahead of
+new discoveries. Identity uses both source and vacancy ID.
+
+History includes all matches on successfully fetched result pages, including
+buffered results and tracking's initial baseline. Cached results are attributed
+separately to each user who searches for them. `/recent` does not fetch live pages,
+change tracking, or interrupt a wizard or active pagination cursor. Fewer than six
+discoveries produce fewer cards; an empty history explains how to start searching.
+
+History persists across restarts and remains after `/finish`, `/untrack`, or
+deleting saved filters. Collection begins with this version; older global vacancy
+records have no reliable user attribution and are not retroactively added. Manual
+searches in group chats do not populate private history. The `recent_vacancies`
+table stores the numeric owner ID, source identity, UTC discovery time, and card
+snapshot; existing data is preserved without a database reset.
+
+### Tracking vacancies
+
+Tracking is available in private chats and uses the current Djinni source:
+
+1. Send `/track` and choose **Saved searches**, then tap **Track every 30 min**
+   on a card. You can also send `/track <saved search ID>` directly.
+2. To start from new filters, choose **Create & track** or send `/track new`.
+   The existing source/keyword/category wizard saves the search first, then
+   enables tracking. With categories, finish with **Save & track**.
+3. The first successful complete scan establishes a baseline without sending old
+   vacancies. Later scans send each newly observed vacancy once per tracked search,
+   with its original link. A vacancy already found by a manual search can still be
+   new to a subscription. Repeated tracking commands keep the existing baseline.
+4. Checks run automatically every **30 minutes**, with no interval configuration.
+   The bot must remain running. `/list` shows tracking status and **Stop tracking**;
+   `/untrack <saved search ID>` stops alerts and keeps the saved filters. `/untrack`
+   opens a shortcut to these controls. `/finish` ends only the interactive wizard
+   or results; it does not stop subscriptions.
+
+Subscriptions, scanned vacancy IDs, pagination cursors, due times, and unsent alerts
+persist in SQLite across restarts. Overdue work resumes at startup, without
+replaying each interval missed while offline. Turning tracking off removes its
+baseline and pending alerts; tracking it again establishes a fresh baseline.
+Blocking the bot disables that subscription on the next attempted delivery.
+
+One background worker shares the existing five-minute result cache and conservative
+source request limits with interactive searches. It wakes every ten seconds to
+process due work and scans at most three pages per search per turn, resuming the
+remaining pages on subsequent turns. The next 30-minute interval starts when a
+complete scan finishes. Large searches, Telegram rate limits, and source failures
+can delay completion. Changed markup and source/network errors retain progress
+and retry after 30 minutes; they never establish a false empty baseline. Initial
+baseline vacancies appearing while a long scan is in progress may be included in
+that baseline. Changes to an already observed vacancy do not trigger another alert.
+
+Alerts are paced and queued until Telegram accepts them. A network failure with an
+uncertain delivery outcome, or a process interruption between sending and recording
+success, can produce a duplicate on retry. A message already being sent when
+tracking stops may still arrive. No extra scheduler package or environment setting
+is required, and shutdown cancels the worker before closing its HTTP clients.
 
 The picker includes all 157 categories in 11 groups from the supplied Djinni tree.
 It supports up to 50 selected items, matching the inspected site's limit. Broad
@@ -177,9 +246,11 @@ Each successful fetch also upserts vacancies into
 `data/vacancies.sqlite3`, uniquely by source and vacancy ID, preserving when each
 vacancy was first seen. SQLite operations run in a worker thread. The separate
 `saved_searches` table stores the numeric Telegram owner ID, source, keyword,
-categories, scope, and UTC creation time only when `/createsearch` is completed.
+categories, scope, and UTC creation time when `/createsearch` or the new-filter
+tracking wizard is completed.
 Ordinary search criteria remain in memory. Restarting clears the result cache and
-active wizard/cursor state; saved filters and vacancies remain in SQLite.
+active wizard/cursor state; saved filters, tracking, recent history, and vacancies
+remain in SQLite.
 Existing Work.ua records remain in the same database. Djinni records use a
 different source key, so matching numeric IDs do not overwrite Work.ua data.
 
@@ -228,7 +299,8 @@ Python's robots parser. A verified permission decision is cached for one hour.
 If robots.txt cannot be verified or disallows the search URL, the search stops.
 The five-minute result cache avoids additional collection between repeated commands.
 The bot reads only robots.txt and public search-results pages requested by the
-optional keyword/category and load-more flow. Cached robots rules are applied to every new URL,
+optional keyword/category and load-more flow or explicitly tracked saved searches.
+Cached robots rules are applied to every new URL,
 including subsequent pages. It does
 not fetch candidate profiles, contacts, full job descriptions, or private pages,
 and does not log in or send applications. No proxy rotation, copied browser
@@ -288,6 +360,9 @@ Inspect the saved-search table locally (these filters are private user data):
 
 The `saved_searches` table is created lazily on first use of saving or listing.
 Existing vacancy data is preserved; no database reset or manual migration is needed.
+The `tracked_searches` and `tracked_matches` tables are initialized alongside saved
+searches. They contain only subscriptions and delivery state tied to saved filters;
+alerts use the existing numeric owner ID as the private-chat destination.
 
 ## Development
 
@@ -400,7 +475,7 @@ src/job_bot/
     __main__.py       # CLI and safe startup diagnostics
     config.py         # Environment and .env configuration
     models.py         # Normalized vacancy dataclass
-    storage.py        # SQLite upserts in worker threads
+    storage.py        # Vacancies, saved filters, and tracking state in worker threads
     sources/
         djinni.py     # Active source: public listings and robots policy
         djinni_categories.py # Official category keys and hierarchy snapshot
@@ -408,6 +483,7 @@ src/job_bot/
         work_ua.py    # Inactive adapter and retained parser
     services/
         job_search.py # Search coordination and cache
+        tracking.py   # Resumable subscription checks and deduplication
     telegram/
         __init__.py
         application.py # Polling lifecycle and handler registration
@@ -415,6 +491,7 @@ src/job_bot/
         formatting.py  # Escaped vacancy card text
         search_state.py # Ephemeral per-user/chat paging state
         categories.py # Grouped category multi-select keyboards
+        tracking.py   # Background worker and Telegram alerts
 tests/
     test_cli.py
     test_config.py

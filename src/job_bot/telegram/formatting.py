@@ -90,5 +90,6 @@ def format_saved_search(search: SavedSearch) -> str:
             f"Categories: {escape(_clip(categories or 'All categories', 1400))}",
             f"Scope: {'Remote only' if search.remote_only else 'All public jobs'}",
             f"Created: {search.created_at.strftime('%Y-%m-%d %H:%M')} UTC",
+            *(["Tracking: every 30 minutes"] if search.tracked else []),
         ]
     )
