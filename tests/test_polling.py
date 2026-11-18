@@ -107,6 +107,7 @@ def test_polling_dispatches_commands_and_closes_clients(
         message_update(16, "/list", True),
         message_update(17, handlers.HELP_BUTTON),
         message_update(18, "/unknown", True),
+        message_update(19, "/recent", True),
     ]
     commands = []
     menu_buttons = []
@@ -167,7 +168,7 @@ def test_polling_dispatches_commands_and_closes_clients(
                 "chat": chat,
                 "text": replies[-1],
             }
-            if len(replies) == (24 if djinni_status == 200 else 16):
+            if len(replies) == (30 if djinni_status == 200 else 17):
                 applications[0].stop_running()
         else:
             raise AssertionError(f"Unexpected Telegram method: {method}")
@@ -220,6 +221,7 @@ def test_polling_dispatches_commands_and_closes_clients(
     ]
     if djinni_status == 200:
         matches = [v for v in parse_search_results(djinni_html) if v.remote is True]
+        recent_cards = [format_vacancy(v) for v in matches[:6]]
         assert replies == [
             handlers.MENU_TEXT,
             START_TEXT,
@@ -228,28 +230,36 @@ def test_polling_dispatches_commands_and_closes_clients(
             category_picker(search_state.SearchSession())[0],
             *[format_vacancy(v) for v in matches],
             *saved_flow,
+            *recent_cards,
         ]
         assert [
             markup["inline_keyboard"][0][0]["url"]
             for markup in buttons
             if "inline_keyboard" in markup
             if "url" in markup["inline_keyboard"][0][0]
-        ] == [v.url for v in matches]
+        ] == [v.url for v in (*matches, *matches[:6])]
     else:
         assert "access is unavailable" in replies[5]
-        assert replies[6:] == saved_flow
+        assert replies[6:] == [
+            *saved_flow,
+            "No recent vacancies yet. Use /search or /track to find some.",
+        ]
         assert len(buttons) == 14
     assert len(djinni_requests) == 1
     assert polls[0]["timeout"] == ["30"]
     assert json.loads(polls[0]["allowed_updates"][0]) == ["message", "callback_query"]
-    assert polls[-1]["offset"] == ["19"]
+    assert polls[-1]["offset"] == ["20"]
     assert len(callback_answers) == 10
     assert len(category_edits) == 3
     assert "no longer current" in callback_answers[6]["text"][0]
     assert [c["command"] for c in commands] == [
         "start",
+        "search",
+        "recent",
         "createsearch",
         "list",
+        "track",
+        "untrack",
         "help",
         "finish",
     ]
@@ -261,9 +271,10 @@ def test_polling_dispatches_commands_and_closes_clients(
     assert keyboards[0]["keyboard"] == [
         [{"text": handlers.FIND_BUTTON}, {"text": handlers.CREATE_BUTTON}],
         [{"text": handlers.LIST_BUTTON}, {"text": handlers.HELP_BUTTON}],
-        [{"text": handlers.FINISH_BUTTON}],
+        [{"text": handlers.TRACK_BUTTON}, {"text": handlers.FINISH_BUTTON}],
     ]
     assert menu_buttons == [{"type": "commands"}]
     assert clients and all(client.is_closed for client in clients)
     assert all(loop.is_closed() for loop in loops)
     assert not applications[0].running
+    assert "tracking_task" not in applications[0].bot_data

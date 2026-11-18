@@ -23,6 +23,8 @@ def category_picker(state: SearchSession) -> tuple[str, InlineKeyboardMarkup]:
         summary = summary[:1399] + "…"
     rows = []
     action_label = "Save search" if state.intent == "save" else "Search"
+    if state.intent == "track":
+        action_label = "Save & track"
     title = "Choose one or more categories"
     if state.category_group is None:
         for index, group in enumerate(CATEGORY_GROUPS):
