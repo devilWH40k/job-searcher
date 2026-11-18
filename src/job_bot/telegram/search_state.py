@@ -15,7 +15,7 @@ class SearchSession:
     """A selected source, unsent cards, and a version for stale-button checks."""
 
     source: str = "djinni"
-    intent: Literal["search", "save"] = "search"
+    intent: Literal["search", "save", "track"] = "search"
     stage: Literal[
         "source", "keyword", "category_choice", "categories", "results", "ready_to_save"
     ] = "keyword"

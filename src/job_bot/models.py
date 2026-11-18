@@ -71,3 +71,14 @@ class SavedSearch:
     categories: tuple[str, ...]
     remote_only: bool
     created_at: datetime
+    tracked: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TrackedSearch:
+    """A persistent subscription and its resumable source-page cursor."""
+
+    id: int
+    search: SavedSearch
+    initialized: bool
+    next_page: int

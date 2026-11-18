@@ -36,13 +36,18 @@ HELP_BUTTON = "💡 Help"
 FINISH_BUTTON = "✅ Finish search"
 CREATE_BUTTON = "💾 Create search"
 LIST_BUTTON = "📋 Saved searches"
+TRACK_BUTTON = "🔔 Track"
 MENU_TEXT = "🧭 Use the buttons below to find a job, get help, or finish your search."
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
     """Show persistent command shortcuts in Telegram's input keyboard area."""
     return ReplyKeyboardMarkup(
-        [[FIND_BUTTON, CREATE_BUTTON], [LIST_BUTTON, HELP_BUTTON], [FINISH_BUTTON]],
+        [
+            [FIND_BUTTON, CREATE_BUTTON],
+            [LIST_BUTTON, HELP_BUTTON],
+            [TRACK_BUTTON, FINISH_BUTTON],
+        ],
         resize_keyboard=True,
         is_persistent=True,
         input_field_placeholder="Enter a keyword or choose an action",
@@ -58,8 +63,12 @@ SEARCHING_TEXT = "Searching Djinni for vacancies..."
 HELP_TEXT = (
     "🧭 Your job search menu\n\n"
     "🔍 /start — Find a job\n"
+    "/search [keywords] — Search directly or open the search menu\n"
+    "/recent — Your six most recently found vacancies\n"
     "💾 /createsearch — Save filters for later\n"
     "📋 /list — Your saved searches\n"
+    "/track — Track a saved search or create one to track\n"
+    "/untrack — Stop alerts and keep saved filters\n"
     "💡 /help — Help & commands\n"
     "✅ /finish — Finish search\n\n"
     "Choose Djinni, enter a keyword or Skip, then choose whether to add categories.\n"
@@ -69,6 +78,11 @@ HELP_TEXT = (
 )
 UNKNOWN_COMMAND_TEXT = "Unknown command. Send /help to see the available commands."
 ERROR_TEXT = "Sorry, I couldn't handle that request. Send /start to try again."
+TRACKING_TEXT = (
+    "I check every 30 minutes while the bot is running. "
+    "The first scan sets a baseline; later scans send new matches. "
+    "Use /untrack to stop alerts."
+)
 
 
 async def _reply(
@@ -106,7 +120,76 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def _private_owner(update: Update) -> int | None:
+async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Offer the wizard without arguments, or search the supplied keyword directly."""
+    message = update.effective_message
+    if message is None:
+        return
+    if not context.args:
+        await start(update, context)
+        return
+    try:
+        keyword = normalize_keyword(" ".join(context.args))
+    except SearchInputError as exc:
+        await _reply(message, str(exc))
+        return
+    state = SearchSession(keyword=keyword, stage="results")
+    _set_session(update, context, state)
+    await _complete_setup(update, context, state)
+
+
+def _search_owner(update: Update) -> int | None:
+    """Only attribute manual discoveries made in private chats to their user."""
+    if (
+        update.effective_user is not None
+        and update.effective_chat is not None
+        and update.effective_chat.type == "private"
+    ):
+        return update.effective_user.id
+    return None
+
+
+async def recent_vacancies(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Replay six owned discoveries without fetching or changing the search cursor."""
+    owner = await _private_owner(update, feature="recent vacancies")
+    message = update.effective_message
+    if owner is None or message is None:
+        return
+    if context.args:
+        await _reply(
+            message, "Use /recent without arguments to see your last six vacancies."
+        )
+        return
+    try:
+        vacancies = await context.application.bot_data[
+            "recent_vacancies"
+        ].list_for_user(owner)
+    except sqlite3.Error, OSError:
+        logger.error("Recent vacancies could not be loaded.")
+        await _reply(
+            message, "I couldn't load your recent vacancies. Try /recent again later."
+        )
+        return
+    if not vacancies:
+        await _reply(
+            message, "No recent vacancies yet. Use /search or /track to find some."
+        )
+        return
+    for vacancy in vacancies:
+        await asyncio.sleep(CARD_INTERVAL_SECONDS)
+        await _reply(
+            message,
+            format_vacancy(vacancy),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Open vacancy", url=vacancy.url)]]
+            ),
+        )
+
+
+async def _private_owner(
+    update: Update, *, feature: str = "saved searches"
+) -> int | None:
     """Keep saved filters out of group chats and use stable numeric ownership."""
     if (
         update.effective_user is None
@@ -116,7 +199,7 @@ async def _private_owner(update: Update) -> int | None:
         if update.effective_message is not None:
             await _reply(
                 update.effective_message,
-                "Use saved searches in a private chat with this bot.",
+                f"Use {feature} in a private chat with this bot.",
             )
         return None
     return update.effective_user.id
@@ -124,13 +207,19 @@ async def _private_owner(update: Update) -> int | None:
 
 async def create_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Start the same setup wizard, saving filters instead of fetching jobs."""
+    await _begin_creation(update, context)
+
+
+async def _begin_creation(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, *, track: bool = False
+) -> None:
     if await _private_owner(update) is None or update.effective_message is None:
         return
-    state = SearchSession(intent="save", stage="source")
+    state = SearchSession(intent="track" if track else "save", stage="source")
     _set_session(update, context, state)
     await _reply(
         update.effective_message,
-        "💾 Create a saved search",
+        "Create & track a saved search" if track else "💾 Create a saved search",
         reply_markup=main_keyboard(),
     )
     await _reply(
@@ -179,14 +268,14 @@ async def select_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     previous = _get_session(update, context)
     creating = (
         previous is not None
-        and previous.intent == "save"
+        and previous.intent in ("save", "track")
         and previous.stage == "source"
         and query.data == f"source:djinni:{previous.token}"
     )
     if query.data != "source:djinni" and not creating:
         await query.answer("That source is not available.")
         return
-    if not creating and previous is not None and previous.intent == "save":
+    if not creating and previous is not None and previous.intent in ("save", "track"):
         await query.answer(
             "This source menu is no longer current. Send /start to search."
         )
@@ -366,7 +455,7 @@ async def _complete_setup(
     message = update.effective_message
     if message is None:
         return
-    if state.intent == "save":
+    if state.intent in ("save", "track"):
         owner = await _private_owner(update)
         if owner is None:
             return
@@ -375,11 +464,22 @@ async def _complete_setup(
             saved = await context.application.bot_data["saved_searches"].save(
                 owner, state.source, state.keyword, state.categories
             )
+            if state.intent == "track":
+                saved = await context.application.bot_data["tracking"].storage.enable(
+                    owner, saved.id
+                )
+                if saved is None:
+                    await _reply(
+                        message, "That search is unavailable. Try /track again."
+                    )
+                    return
         except sqlite3.Error, OSError:
             logger.error("Saved search could not be stored.")
             await _reply(
                 message,
-                "I couldn't save your search. Try again or use /finish.",
+                "I couldn't save or track your search. Try again or use /finish."
+                if state.intent == "track"
+                else "I couldn't save your search. Try again or use /finish.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -398,19 +498,25 @@ async def _complete_setup(
             )
         await _reply(
             message,
-            "✅ Search saved. Use /list to find it later.\n\n"
+            (
+                "✅ Search saved and tracked. " + TRACKING_TEXT + "\n\n"
+                if state.intent == "track"
+                else "✅ Search saved. Use /list to find it later.\n\n"
+            )
             + format_saved_search(saved),
             parse_mode=ParseMode.HTML,
-            reply_markup=_saved_search_markup(saved.id),
+            reply_markup=_saved_search_markup(saved.id, tracked=saved.tracked),
         )
     else:
         state.stage = "results"
         if show_status:
             await _reply(message, SEARCHING_TEXT)
-        await _send_next_batch(message, context, state)
+        await _send_next_batch(message, context, state, owner_id=_search_owner(update))
 
 
-def _saved_search_markup(search_id: int) -> InlineKeyboardMarkup:
+def _saved_search_markup(
+    search_id: int, *, tracked: bool = False
+) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
@@ -420,7 +526,13 @@ def _saved_search_markup(search_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "🗑️ Delete", callback_data=f"saveddelete:{search_id}"
                 ),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    "Stop tracking" if tracked else "Track every 30 min",
+                    callback_data=f"{'untrack' if tracked else 'track'}:{search_id}",
+                )
+            ],
         ]
     )
 
@@ -432,7 +544,7 @@ async def retry_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     state = _get_session(update, context)
     if (
         state is None
-        or state.intent != "save"
+        or state.intent not in ("save", "track")
         or state.stage != "ready_to_save"
         or query.data != f"savesearch:{state.token}"
     ):
@@ -440,6 +552,112 @@ async def retry_save(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     await query.answer()
     await _complete_setup(update, context, state)
+
+
+def _search_id(value: str) -> int | None:
+    if (
+        value.isascii()
+        and value.isdigit()
+        and len(value) <= 19
+        and 0 < int(value) < 2**63
+    ):
+        return int(value)
+    return None
+
+
+async def track_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Choose owned saved filters or save new filters before enabling alerts."""
+    await _change_tracking(update, context, enabled=True)
+
+
+async def untrack_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Stop a subscription without removing the owner's saved search."""
+    await _change_tracking(update, context, enabled=False)
+
+
+async def _change_tracking(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, *, enabled: bool
+) -> None:
+    query = update.callback_query
+    if query is not None:
+        await query.answer()
+    owner = await _private_owner(update)
+    message = update.effective_message
+    if owner is None or message is None:
+        return
+    prefix = "track" if enabled else "untrack"
+    if query is not None:
+        data = query.data
+        if not isinstance(data, str) or not data.startswith(f"{prefix}:"):
+            await _reply(message, "That tracking action is unavailable. Use /list.")
+            return
+        argument = data[len(prefix) + 1 :]
+    else:
+        args = context.args or []
+        argument = args[0] if len(args) == 1 else "" if not args else "invalid"
+    if enabled and argument == "new":
+        await _begin_creation(update, context, track=True)
+        return
+    if not argument:
+        rows = [[InlineKeyboardButton("Saved searches", callback_data="savedlist:0")]]
+        if enabled:
+            rows.append(
+                [InlineKeyboardButton("Create & track", callback_data="track:new")]
+            )
+        await _reply(
+            message,
+            "Choose a saved search and tap Track, "
+            "or create a new one to save and track.\n"
+            "You can also use /track <saved search ID> or /track new.\n\n"
+            + TRACKING_TEXT
+            if enabled
+            else "Open your saved searches and tap Stop tracking. "
+            "You can also use /untrack <saved search ID>. Saved filters are kept.",
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+        return
+    search_id = _search_id(argument)
+    if search_id is None:
+        await _reply(
+            message, f"Use /{prefix} <saved search ID> or /{prefix} to choose."
+        )
+        return
+    storage = context.application.bot_data["tracking"].storage
+    try:
+        saved = await context.application.bot_data["saved_searches"].get_for_user(
+            owner, search_id
+        )
+        if saved is None:
+            await _reply(
+                message, "That saved search is unavailable. Use /list to see yours."
+            )
+            return
+        if enabled:
+            saved = await storage.enable(owner, search_id)
+            if saved is None:
+                await _reply(
+                    message, "That saved search is unavailable. Use /list to see yours."
+                )
+                return
+        else:
+            await storage.disable(owner, search_id)
+            saved = replace(saved, tracked=False)
+    except sqlite3.Error, OSError:
+        logger.error("Tracking could not be changed.")
+        await _reply(message, "I couldn't change tracking. Try again from /list.")
+        return
+    await _reply(
+        message,
+        (
+            "Tracking enabled. " + TRACKING_TEXT
+            if enabled
+            else "Tracking stopped. Your saved search is kept."
+        )
+        + "\n\n"
+        + format_saved_search(saved),
+        parse_mode=ParseMode.HTML,
+        reply_markup=_saved_search_markup(saved.id, tracked=saved.tracked),
+    )
 
 
 async def list_searches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -483,7 +701,9 @@ async def list_searches(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     for index, saved in enumerate(searches[:6]):
         await asyncio.sleep(CARD_INTERVAL_SECONDS)
-        rows = list(_saved_search_markup(saved.id).inline_keyboard)
+        rows = list(
+            _saved_search_markup(saved.id, tracked=saved.tracked).inline_keyboard
+        )
         if len(searches) > 6 and index == 5:
             rows.append(
                 (
@@ -545,7 +765,7 @@ async def run_saved_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     _set_session(update, context, state)
     await _reply(update.effective_message, SEARCHING_TEXT)
-    await _send_next_batch(update.effective_message, context, state)
+    await _send_next_batch(update.effective_message, context, state, owner_id=owner)
 
 
 async def delete_saved_search(
@@ -651,11 +871,17 @@ async def load_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await query.answer()
     if update.effective_message is not None:
         state.touched_at = monotonic()
-        await _send_next_batch(update.effective_message, context, state)
+        await _send_next_batch(
+            update.effective_message, context, state, owner_id=_search_owner(update)
+        )
 
 
 async def _send_next_batch(
-    message: Message, context: ContextTypes.DEFAULT_TYPE, state: SearchSession
+    message: Message,
+    context: ContextTypes.DEFAULT_TYPE,
+    state: SearchSession,
+    *,
+    owner_id: int | None = None,
 ) -> None:
     """Use buffered cards first, fetching at most three source pages per click."""
     pending = list(state.pending)
@@ -676,6 +902,10 @@ async def _send_next_batch(
                 next_page,
                 categories=state.categories,
             )
+            if owner_id is not None:
+                await context.application.bot_data["recent_vacancies"].record(
+                    owner_id, page.vacancies
+                )
             for vacancy in page.vacancies:
                 if vacancy.source_id not in seen_ids:
                     seen_ids.add(vacancy.source_id)

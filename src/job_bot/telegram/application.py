@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from contextlib import suppress
 
 import httpx
 from telegram import BotCommand, MenuButtonCommands, Update
@@ -16,14 +17,21 @@ from telegram.ext import (
 
 from job_bot.config import Config
 from job_bot.services.job_search import JobSearchService
+from job_bot.services.tracking import TrackingService
 from job_bot.sources.djinni import USER_AGENT, DjinniClient
-from job_bot.storage import SavedSearchStorage, VacancyStorage
+from job_bot.storage import (
+    RecentVacancyStorage,
+    SavedSearchStorage,
+    TrackingStorage,
+    VacancyStorage,
+)
 from job_bot.telegram.handlers import (
     CREATE_BUTTON,
     FIND_BUTTON,
     FINISH_BUTTON,
     HELP_BUTTON,
     LIST_BUTTON,
+    TRACK_BUTTON,
     choose_categories,
     create_search,
     delete_saved_search,
@@ -32,15 +40,20 @@ from job_bot.telegram.handlers import (
     list_searches,
     load_more,
     on_error,
+    recent_vacancies,
     retry_save,
     run_saved_search,
+    search_command,
     search_keyword,
     select_categories,
     select_source,
     skip_keyword,
     start,
+    track_search,
     unknown_command,
+    untrack_search,
 )
+from job_bot.telegram.tracking import tracking_worker
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +66,12 @@ def create_application(config: Config) -> Application:
             await application.bot.set_my_commands(
                 [
                     BotCommand("start", "🔍 Find a job"),
+                    BotCommand("search", "Search by keyword or open search menu"),
+                    BotCommand("recent", "Your six most recently found vacancies"),
                     BotCommand("createsearch", "💾 Save search filters"),
                     BotCommand("list", "📋 Your saved searches"),
+                    BotCommand("track", "Track vacancies every 30 minutes"),
+                    BotCommand("untrack", "Stop tracking a saved search"),
                     BotCommand("help", "💡 Help & commands"),
                     BotCommand("finish", "✅ Finish search"),
                 ]
@@ -81,8 +98,27 @@ def create_application(config: Config) -> Application:
         application.bot_data["saved_searches"] = SavedSearchStorage(
             config.database_path
         )
+        application.bot_data["recent_vacancies"] = RecentVacancyStorage(
+            config.database_path
+        )
+        application.bot_data["tracking"] = TrackingService(
+            application.bot_data["job_search"], TrackingStorage(config.database_path)
+        )
+        # Owned explicitly: Application.create_task would wait forever for this
+        # recurring worker during stop(). Cancel it before HTTP clients close.
+        application.bot_data["tracking_task"] = asyncio.create_task(
+            tracking_worker(application), name="vacancy-tracking"
+        )
+
+    async def stop_tracking(application: Application) -> None:
+        task = application.bot_data.pop("tracking_task", None)
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     async def shutdown_search(application: Application) -> None:
+        await stop_tracking(application)
         service = application.bot_data.pop("job_search", None)
         if service is not None:
             await service.aclose()
@@ -100,12 +136,17 @@ def create_application(config: Config) -> Application:
         .get_updates_write_timeout(10)
         .get_updates_pool_timeout(10)
         .post_init(initialize_search)
+        .post_stop(stop_tracking)
         .post_shutdown(shutdown_search)
         .build()
     )
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("recent", recent_vacancies))
     application.add_handler(CommandHandler("createsearch", create_search))
     application.add_handler(CommandHandler("list", list_searches))
+    application.add_handler(CommandHandler("track", track_search))
+    application.add_handler(CommandHandler("untrack", untrack_search))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("finish", finish))
     application.add_handler(
@@ -127,6 +168,8 @@ def create_application(config: Config) -> Application:
     application.add_handler(
         CallbackQueryHandler(delete_saved_search, pattern=r"^saveddelete:")
     )
+    application.add_handler(CallbackQueryHandler(track_search, pattern=r"^track:"))
+    application.add_handler(CallbackQueryHandler(untrack_search, pattern=r"^untrack:"))
     application.add_handler(
         CallbackQueryHandler(load_more, pattern=r"^more:[0-9a-f]{12}:[0-9]+$")
     )
@@ -135,6 +178,7 @@ def create_application(config: Config) -> Application:
         MessageHandler(filters.Text([CREATE_BUTTON]), create_search)
     )
     application.add_handler(MessageHandler(filters.Text([LIST_BUTTON]), list_searches))
+    application.add_handler(MessageHandler(filters.Text([TRACK_BUTTON]), track_search))
     application.add_handler(MessageHandler(filters.Text([HELP_BUTTON]), help_command))
     application.add_handler(MessageHandler(filters.Text([FINISH_BUTTON]), finish))
     application.add_handler(
